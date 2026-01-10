@@ -2,10 +2,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Order, OrderStatus } from '@/types';
-import { 
-  MessageCircle, 
-  Phone, 
-  Calendar, 
+import {
+  MessageCircle,
+  Phone,
+  Calendar,
   Clock,
   MoreHorizontal,
   CheckCircle2,
@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { format, isToday, isTomorrow, isPast } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 interface OrderCardProps {
   order: Order;
@@ -46,28 +47,36 @@ const statusLabels = {
   cancelled: 'Cancelled',
 };
 
-function formatDeliveryDate(date: Date): string {
-  if (isToday(date)) return 'Today';
-  if (isTomorrow(date)) return 'Tomorrow';
-  return format(date, 'MMM d, yyyy');
+function formatDateTime(date: Date, hasTime: boolean): string {
+  const datePart = isToday(date) ? 'Today' : isTomorrow(date) ? 'Tomorrow' : format(date, 'MMM d');
+  return hasTime ? `${datePart} at ${format(date, 'h:mm a')}` : datePart;
 }
 
 export function OrderCard({ order, onStatusChange, onViewCustomer }: OrderCardProps) {
+  const navigate = useNavigate();
   const SourceIcon = sourceIcons[order.source];
   const isOverdue = isPast(order.deliveryDate) && order.status === 'pending';
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Prevent navigation if clicking on a button or menu
+    if ((e.target as HTMLElement).closest('button')) return;
+    navigate(`/orders/${order.id}`);
+  };
+
   return (
-    <Card className="group relative overflow-hidden p-4 transition-all hover:shadow-md animate-fade-in">
+    <Card
+      className="group relative overflow-hidden p-4 transition-all hover:shadow-md cursor-pointer animate-fade-in"
+      onClick={handleCardClick}
+    >
       {/* Status indicator bar */}
-      <div 
-        className={`absolute left-0 top-0 h-full w-1 ${
-          order.status === 'pending' ? 'bg-status-pending' :
+      <div
+        className={`absolute left-0 top-0 h-full w-1 ${order.status === 'pending' ? 'bg-status-pending' :
           order.status === 'confirmed' ? 'bg-status-confirmed' :
-          order.status === 'delivered' ? 'bg-status-delivered' :
-          'bg-status-cancelled'
-        }`}
+            order.status === 'delivered' ? 'bg-status-delivered' :
+              'bg-status-cancelled'
+          }`}
       />
-      
+
       <div className="pl-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -76,21 +85,29 @@ export function OrderCard({ order, onStatusChange, onViewCustomer }: OrderCardPr
               <h3 className="font-semibold truncate">{order.customerName || order.phone}</h3>
               <Badge variant={order.source}>{sourceLabels[order.source]}</Badge>
             </div>
-            <button 
-              onClick={() => onViewCustomer(order.customerId)}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewCustomer(order.customerId);
+              }}
               className="text-sm text-muted-foreground hover:text-primary transition-colors"
             >
               {order.phone}
             </button>
           </div>
-          
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-card">
+            <DropdownMenuContent align="end" className="bg-card" onClick={(e) => e.stopPropagation()}>
               <DropdownMenuItem onClick={() => onStatusChange(order.id, 'confirmed')}>
                 <CheckCircle2 className="mr-2 h-4 w-4 text-status-confirmed" />
                 Mark Confirmed
@@ -100,7 +117,7 @@ export function OrderCard({ order, onStatusChange, onViewCustomer }: OrderCardPr
                 Mark Delivered
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => onStatusChange(order.id, 'cancelled')}
                 className="text-destructive focus:text-destructive"
               >
@@ -113,27 +130,29 @@ export function OrderCard({ order, onStatusChange, onViewCustomer }: OrderCardPr
 
         {/* Product Details */}
         <p className="mt-3 text-sm text-foreground">{order.productDetails}</p>
-        
+
         {/* Notes */}
         {order.notes && (
           <p className="mt-2 text-sm text-muted-foreground italic">"{order.notes}"</p>
         )}
 
         {/* Footer */}
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-1.5 text-sm ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-              <Calendar className="h-4 w-4" />
-              {formatDeliveryDate(order.deliveryDate)}
-              {isOverdue && <span className="text-xs">(Overdue)</span>}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1.5">
+            <div className={`flex items-center gap-1.5 text-xs ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-medium">Delivery:</span>
+              <span>{formatDateTime(order.deliveryDate, order.hasDeliveryTime)}</span>
+              {isOverdue && <span className="text-[10px] ml-1 uppercase font-bold">(Overdue)</span>}
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              {format(order.createdAt, 'h:mm a')}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-medium">Ordered:</span>
+              <span>{formatDateTime(order.orderDate, order.hasOrderTime)}</span>
             </div>
           </div>
-          
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
             <span className="text-lg font-semibold">${order.price.toFixed(2)}</span>
             <Badge variant={order.status}>{statusLabels[order.status]}</Badge>
           </div>

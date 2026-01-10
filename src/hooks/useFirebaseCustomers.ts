@@ -9,7 +9,9 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
-  getDocs
+  getDocs,
+  setDoc,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
@@ -67,26 +69,47 @@ export function useFirebaseCustomers() {
     if (!user) throw new Error('Not authenticated');
     setIsCreating(true);
 
+    // Normalize phone: keep only digits
+    const normalizedPhone = customer.phone.replace(/\D/g, '');
+    if (!normalizedPhone) throw new Error('Invalid phone number');
+
     try {
-      const customersRef = collection(db, 'customers');
-      const docRef = await addDoc(customersRef, {
+      const customerRef = doc(db, 'customers', normalizedPhone);
+      const docSnap = await getDoc(customerRef);
+
+      if (docSnap.exists()) {
+        const existingData = docSnap.data();
+        return {
+          id: docSnap.id,
+          ownerId: existingData.ownerId,
+          phone: existingData.phone,
+          name: existingData.name,
+          rating: existingData.rating || 0,
+          comment: existingData.comment || '',
+          createdAt: existingData.createdAt?.toDate() || new Date(),
+        } as Customer;
+      }
+
+      const newCustomerData = {
+        ownerId: user.uid,
+        phone: customer.phone, // Store original format for display
+        name: customer.name,
+        rating: customer.rating,
+        comment: customer.comment,
+        createdAt: serverTimestamp(),
+      };
+
+      await setDoc(customerRef, newCustomerData);
+
+      return {
+        id: normalizedPhone,
         ownerId: user.uid,
         phone: customer.phone,
         name: customer.name,
         rating: customer.rating,
         comment: customer.comment,
-        createdAt: serverTimestamp(),
-      });
-
-      return {
-        id: docRef.id,
-        owner_id: user.uid,
-        phone: customer.phone,
-        name: customer.name,
-        rating: customer.rating,
-        comment: customer.comment,
-        created_at: new Date().toISOString(),
-      };
+        createdAt: new Date(),
+      } as Customer;
     } finally {
       setIsCreating(false);
     }

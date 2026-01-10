@@ -19,11 +19,15 @@ export interface Order {
   customerName?: string;
   productDetails: string;
   price: number;
+  orderDate: Date;
   deliveryDate: Date;
+  hasOrderTime: boolean;
+  hasDeliveryTime: boolean;
   status: OrderStatus;
   source: OrderSource;
   notes: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface User {
@@ -32,4 +36,15 @@ export interface User {
   email: string;
   plan: 'free' | 'paid';
   createdAt: Date;
+}
+
+export interface Experience {
+  id: string;
+  rating: number;
+  comment: string;
+  orderId: string;
+  ownerId: string;
+  customerId: string;
+  createdAt: Date;
+  updatedAt: Date;
 }

@@ -4,6 +4,7 @@ import { OrderCard } from '@/components/orders/OrderCard';
 import { StatusTabs } from '@/components/orders/StatusTabs';
 import { AddOrderDialog } from '@/components/orders/AddOrderDialog';
 import { CustomerDialog } from '@/components/customers/CustomerDialog';
+import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
 import { Button } from '@/components/ui/button';
 import { Plus, Package, Loader2 } from 'lucide-react';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
@@ -11,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
 import { useFirebaseCustomers } from '@/hooks/useFirebaseCustomers';
+import { useFirebaseExperience } from '@/hooks/useFirebaseExperience';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Dashboard() {
@@ -18,12 +20,16 @@ export default function Dashboard() {
   const { user, profile, loading: authLoading, signOut } = useFirebaseAuth();
   const { orders, isLoading: ordersLoading, error: ordersError, createOrder, updateOrderStatus, isCreating } = useFirebaseOrders();
   const { customers, isLoading: customersLoading, error: customersError, createCustomer, updateCustomer, findCustomerByPhone } = useFirebaseCustomers();
+  const { createExperience, isLoading: experienceLoading } = useFirebaseExperience();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('all');
   const [addOrderOpen, setAddOrderOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [experienceOpen, setExperienceOpen] = useState(false);
+  const [orderToDeliver, setOrderToDeliver] = useState<Order | null>(null);
+  const [targetFeedbackStatus, setTargetFeedbackStatus] = useState<OrderStatus>('delivered');
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -71,17 +77,58 @@ export default function Dashboard() {
   const filteredOrders = getFilteredOrders();
   const statusCounts = getStatusCounts();
 
-  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+  const handleStatusChange = async (orderId: string, status: OrderStatus) => {
+    if (status === 'delivered' || status === 'cancelled') {
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        setOrderToDeliver(order);
+        setTargetFeedbackStatus(status);
+        setExperienceOpen(true);
+        return;
+      }
+    }
+
     try {
-      await updateOrderStatus({ orderId, status: newStatus });
+      await updateOrderStatus({ orderId, status });
       toast({
         title: 'Status updated',
-        description: `Order marked as ${newStatus}`,
+        description: `Order marked as ${status}`,
       });
     } catch (error) {
       toast({
         title: 'Error',
         description: 'Failed to update order status',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleExperienceSubmit = async (rating: number, comment: string) => {
+    if (!orderToDeliver) return;
+
+    try {
+      // 1. Update order status
+      await updateOrderStatus({ orderId: orderToDeliver.id, status: targetFeedbackStatus });
+
+      // 2. Create experience record
+      await createExperience({
+        rating,
+        comment,
+        orderId: orderToDeliver.id,
+        customerId: orderToDeliver.customerId,
+      });
+
+      toast({
+        title: targetFeedbackStatus === 'cancelled' ? 'Order cancelled' : 'Order delivered',
+        description: 'Feedback recorded successfully',
+      });
+
+      setExperienceOpen(false);
+      setOrderToDeliver(null);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to complete delivery',
         variant: 'destructive',
       });
     }
@@ -119,7 +166,10 @@ export default function Dashboard() {
     customerName: string;
     productDetails: string;
     price: number;
+    orderDate: Date;
     deliveryDate: Date;
+    hasOrderTime: boolean;
+    hasDeliveryTime: boolean;
     source: OrderSource;
     notes: string;
   }) => {
@@ -135,15 +185,7 @@ export default function Dashboard() {
           rating: 0,
           comment: '',
         });
-        customer = {
-          id: newCustomer.id,
-          ownerId: newCustomer.owner_id,
-          phone: newCustomer.phone,
-          name: newCustomer.name,
-          rating: newCustomer.rating,
-          comment: newCustomer.comment,
-          createdAt: new Date(newCustomer.created_at),
-        };
+        customer = newCustomer;
       }
 
       // Create order
@@ -154,7 +196,10 @@ export default function Dashboard() {
         customerName: orderData.customerName || customer.name,
         productDetails: orderData.productDetails,
         price: orderData.price,
+        orderDate: orderData.orderDate,
         deliveryDate: orderData.deliveryDate,
+        hasOrderTime: orderData.hasOrderTime,
+        hasDeliveryTime: orderData.hasDeliveryTime,
         status: 'pending',
         source: orderData.source,
         notes: orderData.notes,
@@ -263,6 +308,18 @@ export default function Dashboard() {
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
         onUpdateCustomer={handleUpdateCustomer}
+      />
+
+      <ExperienceDialog
+        open={experienceOpen}
+        onOpenChange={(open) => {
+          setExperienceOpen(open);
+          if (!open) setOrderToDeliver(null);
+        }}
+        order={orderToDeliver}
+        targetStatus={targetFeedbackStatus}
+        onSubmit={handleExperienceSubmit}
+        isSubmitting={experienceLoading}
       />
     </DashboardLayout>
   );

@@ -8,6 +8,7 @@ import {
   addDoc,
   updateDoc,
   doc,
+  getDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -47,11 +48,15 @@ export function useFirebaseOrders() {
             customerName: data.customerName,
             productDetails: data.productDetails,
             price: Number(data.price),
+            orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
             deliveryDate: data.deliveryDate?.toDate() || new Date(),
+            hasOrderTime: data.hasOrderTime || false,
+            hasDeliveryTime: data.hasDeliveryTime || false,
             status: data.status as OrderStatus,
             source: data.source as OrderSource,
             notes: data.notes || '',
             createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || data.createdAt?.toDate() || new Date(),
           } as Order;
         });
         setOrders(ordersData);
@@ -67,7 +72,7 @@ export function useFirebaseOrders() {
     return () => unsubscribe();
   }, [user]);
 
-  const createOrder = async (order: Omit<Order, 'id' | 'createdAt'>) => {
+  const createOrder = async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (!user) throw new Error('Not authenticated');
     setIsCreating(true);
 
@@ -80,11 +85,15 @@ export function useFirebaseOrders() {
         customerName: order.customerName,
         productDetails: order.productDetails,
         price: order.price,
+        orderDate: order.orderDate,
         deliveryDate: order.deliveryDate,
+        hasOrderTime: order.hasOrderTime,
+        hasDeliveryTime: order.hasDeliveryTime,
         status: order.status,
         source: order.source,
         notes: order.notes,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
     } finally {
       setIsCreating(false);
@@ -95,7 +104,61 @@ export function useFirebaseOrders() {
     setIsUpdating(true);
     try {
       const orderRef = doc(db, 'orders', orderId);
-      await updateDoc(orderRef, { status });
+      await updateDoc(orderRef, {
+        status,
+        updatedAt: serverTimestamp()
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const getOrderById = async (orderId: string) => {
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      const docSnap = await getDoc(orderRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ownerId: data.ownerId,
+          customerId: data.customerId || '',
+          phone: data.phone,
+          customerName: data.customerName,
+          productDetails: data.productDetails,
+          price: Number(data.price),
+          orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
+          deliveryDate: data.deliveryDate?.toDate() || new Date(),
+          hasOrderTime: data.hasOrderTime || false,
+          hasDeliveryTime: data.hasDeliveryTime || false,
+          status: data.status as OrderStatus,
+          source: data.source as OrderSource,
+          notes: data.notes || '',
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || data.createdAt?.toDate() || new Date(),
+        } as Order;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching order by ID:', error);
+      return null;
+    }
+  };
+
+  const updateOrder = async (orderId: string, updates: Partial<Order>) => {
+    setIsUpdating(true);
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      const firestoreUpdates: any = {
+        ...updates,
+        updatedAt: serverTimestamp()
+      };
+      // Convert Date objects to server-friendly format if they exist
+      if (updates.orderDate) firestoreUpdates.orderDate = updates.orderDate;
+      if (updates.deliveryDate) firestoreUpdates.deliveryDate = updates.deliveryDate;
+
+      await updateDoc(orderRef, firestoreUpdates);
     } finally {
       setIsUpdating(false);
     }
@@ -107,6 +170,8 @@ export function useFirebaseOrders() {
     error,
     createOrder,
     updateOrderStatus,
+    updateOrder,
+    getOrderById,
     isCreating,
     isUpdating,
   };
