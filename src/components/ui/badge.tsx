@@ -12,6 +12,13 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
+        pending: "border-transparent bg-status-pending text-status-pending-foreground",
+        confirmed: "border-transparent bg-status-confirmed text-status-confirmed-foreground",
+        delivered: "border-transparent bg-status-delivered text-status-delivered-foreground",
+        cancelled: "border-transparent bg-status-cancelled text-status-cancelled-foreground",
+        whatsapp: "border-transparent bg-source-whatsapp/15 text-source-whatsapp",
+        messenger: "border-transparent bg-source-messenger/15 text-source-messenger",
+        phone: "border-transparent bg-source-phone/15 text-source-phone",
       },
     },
     defaultVariants: {
