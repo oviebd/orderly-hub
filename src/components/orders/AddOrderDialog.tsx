@@ -22,7 +22,6 @@ import { format } from 'date-fns';
 import { CalendarIcon, Star, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OrderSource, Customer } from '@/types';
-import { mockCustomers } from '@/lib/mock-data';
 
 interface AddOrderDialogProps {
   open: boolean;
@@ -36,9 +35,10 @@ interface AddOrderDialogProps {
     source: OrderSource;
     notes: string;
   }) => void;
+  customers: Customer[];
 }
 
-export function AddOrderDialog({ open, onOpenChange, onSubmit }: AddOrderDialogProps) {
+export function AddOrderDialog({ open, onOpenChange, onSubmit, customers }: AddOrderDialogProps) {
   const [phone, setPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [productDetails, setProductDetails] = useState('');
@@ -51,7 +51,7 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit }: AddOrderDialogP
   const handlePhoneChange = (value: string) => {
     setPhone(value);
     // Look up customer by phone
-    const customer = mockCustomers.find(c => c.phone === value || c.phone.includes(value.replace(/\D/g, '')));
+    const customer = customers.find(c => c.phone === value || c.phone.includes(value.replace(/\D/g, '')));
     if (customer) {
       setMatchedCustomer(customer);
       setCustomerName(customer.name);

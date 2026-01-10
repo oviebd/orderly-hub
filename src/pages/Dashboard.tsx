@@ -1,33 +1,90 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { OrderCard } from '@/components/orders/OrderCard';
 import { StatusTabs } from '@/components/orders/StatusTabs';
 import { AddOrderDialog } from '@/components/orders/AddOrderDialog';
 import { CustomerDialog } from '@/components/customers/CustomerDialog';
 import { Button } from '@/components/ui/button';
-import { Plus, Package } from 'lucide-react';
-import { mockOrders, mockCustomers, getOrdersByStatus, getStatusCounts } from '@/lib/mock-data';
+import { Plus, Package, Loader2 } from 'lucide-react';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOrders } from '@/hooks/useOrders';
+import { useCustomers } from '@/hooks/useCustomers';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { orders, isLoading: ordersLoading, createOrder, updateOrderStatus, isCreating } = useOrders();
+  const { customers, isLoading: customersLoading, createCustomer, updateCustomer, findCustomerByPhone } = useCustomers();
+  const { toast } = useToast();
+  
   const [activeTab, setActiveTab] = useState('all');
   const [addOrderOpen, setAddOrderOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
 
-  const filteredOrders = getOrdersByStatus(orders, activeTab as OrderStatus | 'all' | 'today');
-  const statusCounts = getStatusCounts(orders);
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/login');
+    }
+  }, [user, authLoading, navigate]);
 
-  const handleStatusChange = (orderId: string, newStatus: OrderStatus) => {
-    setOrders(prev => 
-      prev.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
-      )
-    );
+  const getFilteredOrders = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    switch (activeTab) {
+      case 'today':
+        return orders.filter(order => {
+          const orderDate = new Date(order.deliveryDate);
+          orderDate.setHours(0, 0, 0, 0);
+          return orderDate.getTime() === today.getTime();
+        });
+      case 'all':
+        return orders;
+      default:
+        return orders.filter(order => order.status === activeTab);
+    }
+  };
+
+  const getStatusCounts = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return {
+      all: orders.length,
+      today: orders.filter(order => {
+        const orderDate = new Date(order.deliveryDate);
+        orderDate.setHours(0, 0, 0, 0);
+        return orderDate.getTime() === today.getTime();
+      }).length,
+      pending: orders.filter(o => o.status === 'pending').length,
+      confirmed: orders.filter(o => o.status === 'confirmed').length,
+      delivered: orders.filter(o => o.status === 'delivered').length,
+      cancelled: orders.filter(o => o.status === 'cancelled').length,
+    };
+  };
+
+  const filteredOrders = getFilteredOrders();
+  const statusCounts = getStatusCounts();
+
+  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+    try {
+      await updateOrderStatus({ orderId, status: newStatus });
+      toast({
+        title: 'Status updated',
+        description: `Order marked as ${newStatus}`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update order status',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleViewCustomer = (customerId: string) => {
@@ -38,18 +95,26 @@ export default function Dashboard() {
     }
   };
 
-  const handleUpdateCustomer = (customerId: string, updates: Partial<Customer>) => {
-    setCustomers(prev =>
-      prev.map(customer =>
-        customer.id === customerId ? { ...customer, ...updates } : customer
-      )
-    );
-    if (selectedCustomer?.id === customerId) {
-      setSelectedCustomer(prev => prev ? { ...prev, ...updates } : null);
+  const handleUpdateCustomer = async (customerId: string, updates: Partial<Customer>) => {
+    try {
+      await updateCustomer({ customerId, updates });
+      if (selectedCustomer?.id === customerId) {
+        setSelectedCustomer(prev => prev ? { ...prev, ...updates } : null);
+      }
+      toast({
+        title: 'Customer updated',
+        description: 'Customer information saved successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update customer',
+        variant: 'destructive',
+      });
     }
   };
 
-  const handleAddOrder = (orderData: {
+  const handleAddOrder = async (orderData: {
     phone: string;
     customerName: string;
     productDetails: string;
@@ -58,48 +123,71 @@ export default function Dashboard() {
     source: OrderSource;
     notes: string;
   }) => {
-    // Check if customer exists
-    let customer = customers.find(c => c.phone === orderData.phone);
-    
-    if (!customer) {
-      // Create new customer
-      customer = {
-        id: Date.now().toString(),
-        ownerId: 'user1',
+    try {
+      // Check if customer exists
+      let customer = findCustomerByPhone(orderData.phone);
+      
+      if (!customer) {
+        // Create new customer
+        const newCustomer = await createCustomer({
+          phone: orderData.phone,
+          name: orderData.customerName || 'Unknown',
+          rating: 0,
+          comment: '',
+        });
+        customer = {
+          id: newCustomer.id,
+          ownerId: newCustomer.owner_id,
+          phone: newCustomer.phone,
+          name: newCustomer.name,
+          rating: newCustomer.rating,
+          comment: newCustomer.comment,
+          createdAt: new Date(newCustomer.created_at),
+        };
+      }
+
+      // Create order
+      await createOrder({
+        ownerId: user!.id,
+        customerId: customer.id,
         phone: orderData.phone,
-        name: orderData.customerName || 'Unknown',
-        rating: 0,
-        comment: '',
-        createdAt: new Date(),
-      };
-      setCustomers(prev => [...prev, customer!]);
+        customerName: orderData.customerName || customer.name,
+        productDetails: orderData.productDetails,
+        price: orderData.price,
+        deliveryDate: orderData.deliveryDate,
+        status: 'pending',
+        source: orderData.source,
+        notes: orderData.notes,
+      });
+
+      toast({
+        title: 'Order created',
+        description: 'New order added successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to create order',
+        variant: 'destructive',
+      });
     }
-
-    // Create new order
-    const newOrder: Order = {
-      id: Date.now().toString(),
-      ownerId: 'user1',
-      customerId: customer.id,
-      phone: orderData.phone,
-      customerName: orderData.customerName || customer.name,
-      productDetails: orderData.productDetails,
-      price: orderData.price,
-      deliveryDate: orderData.deliveryDate,
-      status: 'pending',
-      source: orderData.source,
-      notes: orderData.notes,
-      createdAt: new Date(),
-    };
-
-    setOrders(prev => [newOrder, ...prev]);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     navigate('/');
   };
 
+  if (authLoading || ordersLoading || customersLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
-    <DashboardLayout businessName="Sweet Delights Bakery" onLogout={handleLogout}>
+    <DashboardLayout businessName={profile?.business_name || 'My Business'} onLogout={handleLogout}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -107,8 +195,8 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
             <p className="text-muted-foreground">Manage your orders and track deliveries</p>
           </div>
-          <Button onClick={() => setAddOrderOpen(true)} size="lg" className="gap-2">
-            <Plus className="h-5 w-5" />
+          <Button onClick={() => setAddOrderOpen(true)} size="lg" className="gap-2" disabled={isCreating}>
+            {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
             New Order
           </Button>
         </div>
@@ -158,6 +246,7 @@ export default function Dashboard() {
         open={addOrderOpen}
         onOpenChange={setAddOrderOpen}
         onSubmit={handleAddOrder}
+        customers={customers}
       />
       
       <CustomerDialog
