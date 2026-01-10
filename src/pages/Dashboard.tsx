@@ -6,7 +6,7 @@ import { AddOrderDialog } from '@/components/orders/AddOrderDialog';
 import { CustomerDialog } from '@/components/customers/CustomerDialog';
 import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
 import { Button } from '@/components/ui/button';
-import { Plus, Package, Loader2 } from 'lucide-react';
+import { Plus, Package, Loader2, Search, ArrowUpDown } from 'lucide-react';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
@@ -14,6 +14,8 @@ import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
 import { useFirebaseCustomers } from '@/hooks/useFirebaseCustomers';
 import { useFirebaseExperience } from '@/hooks/useFirebaseExperience';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -24,6 +26,8 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [addOrderOpen, setAddOrderOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -42,18 +46,45 @@ export default function Dashboard() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    let filtered = [...orders];
+
+    // Tab Filter
     switch (activeTab) {
       case 'today':
-        return orders.filter(order => {
+        filtered = filtered.filter(order => {
           const orderDate = new Date(order.deliveryDate);
           orderDate.setHours(0, 0, 0, 0);
           return orderDate.getTime() === today.getTime();
         });
+        break;
       case 'all':
-        return orders;
+        break;
       default:
-        return orders.filter(order => order.status === activeTab);
+        filtered = filtered.filter(order => order.status === activeTab);
+        break;
     }
+
+    // Search Filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(order => {
+        const customer = customers.find(c => c.id === order.customerId);
+        return (
+          customer?.name.toLowerCase().includes(q) ||
+          order.phone.includes(q) ||
+          order.productDetails.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      const timeA = a.orderDate.getTime();
+      const timeB = b.orderDate.getTime();
+      return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+    });
+
+    return filtered;
   };
 
   const getStatusCounts = () => {
@@ -251,6 +282,30 @@ export default function Dashboard() {
             {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
             New Order
           </Button>
+        </div>
+
+        {/* Filters and Search */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, phone, or details..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-card"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className={cn("gap-2 bg-card")}
+            >
+              <ArrowUpDown className="h-4 w-4" />
+              Order Time {sortOrder === 'asc' ? '(Oldest)' : '(Newest)'}
+            </Button>
+          </div>
         </div>
 
         {/* Status Tabs */}
