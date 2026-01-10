@@ -3,20 +3,55 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package } from 'lucide-react';
+import { Package, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { signIn, signUp } = useAuth();
+  const { toast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // For demo purposes, just navigate to dashboard
-    navigate('/dashboard');
+    setIsLoading(true);
+
+    try {
+      if (isLogin) {
+        const { error } = await signIn(email, password);
+        if (error) {
+          toast({
+            title: 'Login failed',
+            description: error.message,
+            variant: 'destructive',
+          });
+          return;
+        }
+      } else {
+        const { error } = await signUp(email, password, businessName);
+        if (error) {
+          toast({
+            title: 'Sign up failed',
+            description: error.message,
+            variant: 'destructive',
+          });
+          return;
+        }
+        toast({
+          title: 'Account created!',
+          description: 'Welcome to OrderFlow. You are now logged in.',
+        });
+      }
+      navigate('/dashboard');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -54,6 +89,7 @@ export default function Login() {
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
                     required={!isLogin}
+                    disabled={isLoading}
                   />
                 </div>
               )}
@@ -67,6 +103,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={isLoading}
                 />
               </div>
               
@@ -79,10 +116,13 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
+                  disabled={isLoading}
                 />
               </div>
 
-              <Button type="submit" className="w-full" size="lg">
+              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isLogin ? 'Sign In' : 'Create Account'}
               </Button>
             </form>
@@ -95,6 +135,7 @@ export default function Login() {
                 type="button"
                 onClick={() => setIsLogin(!isLogin)}
                 className="text-primary hover:underline font-medium"
+                disabled={isLoading}
               >
                 {isLogin ? 'Sign up' : 'Sign in'}
               </button>
