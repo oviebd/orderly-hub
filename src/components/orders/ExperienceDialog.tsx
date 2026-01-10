@@ -22,6 +22,7 @@ interface ExperienceDialogProps {
     initialRating?: number;
     initialComment?: string;
     isEditing?: boolean;
+    customerName?: string;
 }
 
 export function ExperienceDialog({
@@ -33,7 +34,8 @@ export function ExperienceDialog({
     targetStatus,
     initialRating = 0,
     initialComment = '',
-    isEditing = false
+    isEditing = false,
+    customerName
 }: ExperienceDialogProps) {
     const [rating, setRating] = useState(initialRating);
     const [hoveredRating, setHoveredRating] = useState(0);
@@ -62,8 +64,8 @@ export function ExperienceDialog({
     const description = isEditing
         ? `Update your experience for this order.`
         : isCancelled
-            ? `We're sorry this order was cancelled. How was the process with ${order?.customerName || 'the customer'}?`
-            : `How was the delivery experience with ${order?.customerName || 'the customer'}?`;
+            ? `We're sorry this order was cancelled. How was the process with ${customerName || 'the customer'}?`
+            : `How was the delivery experience with ${customerName || 'the customer'}?`;
 
     const commentLabel = isCancelled ? 'Cancellation Reason / Comment' : 'Comment';
     const commentPlaceholder = isCancelled

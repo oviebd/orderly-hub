@@ -193,7 +193,6 @@ export default function Dashboard() {
         ownerId: user!.uid,
         customerId: customer.id,
         phone: orderData.phone,
-        customerName: orderData.customerName || customer.name,
         productDetails: orderData.productDetails,
         price: orderData.price,
         orderDate: orderData.orderDate,
@@ -285,6 +284,7 @@ export default function Dashboard() {
               <div key={order.id} style={{ animationDelay: `${index * 50}ms` }}>
                 <OrderCard
                   order={order}
+                  customerName={customers.find(c => c.id === order.customerId)?.name}
                   onStatusChange={handleStatusChange}
                   onViewCustomer={handleViewCustomer}
                 />
@@ -317,6 +317,7 @@ export default function Dashboard() {
           if (!open) setOrderToDeliver(null);
         }}
         order={orderToDeliver}
+        customerName={customers.find(c => c.id === orderToDeliver?.customerId)?.name}
         targetStatus={targetFeedbackStatus}
         onSubmit={handleExperienceSubmit}
         isSubmitting={experienceLoading}

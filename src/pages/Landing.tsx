@@ -1,9 +1,19 @@
 import { Button } from '@/components/ui/button';
 import { Package, CheckCircle, Clock, Users, ArrowRight, Star, MessageCircle, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { user } = useFirebaseAuth();
+
+  const handleStart = () => {
+    if (user) {
+      navigate('/dashboard');
+    } else {
+      navigate('/login');
+    }
+  };
 
   const features = [
     {
@@ -41,11 +51,11 @@ export default function Landing() {
             <span className="text-lg font-semibold">OrderFlow</span>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={() => navigate('/login')}>
-              Sign In
+            <Button variant="ghost" onClick={handleStart}>
+              {user ? 'Go to Dashboard' : 'Sign In'}
             </Button>
-            <Button onClick={() => navigate('/login')}>
-              Get Started
+            <Button onClick={handleStart}>
+              {user ? 'Dashboard' : 'Get Started'}
             </Button>
           </div>
         </div>
@@ -58,19 +68,19 @@ export default function Landing() {
             <Star className="h-4 w-4 fill-primary" />
             Free for up to 50 orders/month
           </div>
-          
+
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6 animate-fade-in">
             Stop losing orders in
             <span className="text-primary"> your WhatsApp chats</span>
           </h1>
-          
+
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 animate-fade-in" style={{ animationDelay: '100ms' }}>
             A simple order notebook for small businesses. Track orders, remember customers, and never miss a delivery again.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in" style={{ animationDelay: '200ms' }}>
-            <Button variant="hero" size="xl" onClick={() => navigate('/login')} className="gap-2">
-              Start Free <ArrowRight className="h-5 w-5" />
+            <Button variant="hero" size="xl" onClick={handleStart} className="gap-2">
+              {user ? 'Go to Dashboard' : 'Start Free'} <ArrowRight className="h-5 w-5" />
             </Button>
             <Button variant="hero-outline" size="xl" onClick={() => navigate('/dashboard')}>
               View Demo
@@ -106,7 +116,7 @@ export default function Landing() {
 
           <div className="grid md:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <div 
+              <div
                 key={feature.title}
                 className="bg-card rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow animate-fade-in"
                 style={{ animationDelay: `${index * 100}ms` }}
@@ -131,8 +141,8 @@ export default function Landing() {
           <p className="text-lg text-muted-foreground mb-8">
             Start for free. No credit card required.
           </p>
-          <Button variant="hero" size="xl" onClick={() => navigate('/login')} className="gap-2">
-            Get Started Free <ArrowRight className="h-5 w-5" />
+          <Button variant="hero" size="xl" onClick={handleStart} className="gap-2">
+            {user ? 'Go to Dashboard' : 'Get Started Free'} <ArrowRight className="h-5 w-5" />
           </Button>
         </div>
       </section>

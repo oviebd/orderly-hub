@@ -47,9 +47,12 @@ export function useFirebaseCustomers() {
             ownerId: data.ownerId,
             phone: data.phone,
             name: data.name,
+            email: data.email || '',
+            address: data.address || '',
             rating: data.rating || 0,
             comment: data.comment || '',
             createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || undefined,
           } as Customer;
         });
         setCustomers(customersData);
@@ -84,9 +87,12 @@ export function useFirebaseCustomers() {
           ownerId: existingData.ownerId,
           phone: existingData.phone,
           name: existingData.name,
+          email: existingData.email || '',
+          address: existingData.address || '',
           rating: existingData.rating || 0,
           comment: existingData.comment || '',
           createdAt: existingData.createdAt?.toDate() || new Date(),
+          updatedAt: existingData.updatedAt?.toDate() || undefined,
         } as Customer;
       }
 
@@ -94,9 +100,12 @@ export function useFirebaseCustomers() {
         ownerId: user.uid,
         phone: customer.phone, // Store original format for display
         name: customer.name,
+        email: customer.email || '',
+        address: customer.address || '',
         rating: customer.rating,
         comment: customer.comment,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
       await setDoc(customerRef, newCustomerData);
@@ -106,9 +115,12 @@ export function useFirebaseCustomers() {
         ownerId: user.uid,
         phone: customer.phone,
         name: customer.name,
+        email: customer.email || '',
+        address: customer.address || '',
         rating: customer.rating,
         comment: customer.comment,
         createdAt: new Date(),
+        updatedAt: new Date(),
       } as Customer;
     } finally {
       setIsCreating(false);
@@ -119,11 +131,19 @@ export function useFirebaseCustomers() {
     setIsUpdating(true);
     try {
       const customerRef = doc(db, 'customers', customerId);
-      await updateDoc(customerRef, {
-        ...(updates.name !== undefined && { name: updates.name }),
-        ...(updates.rating !== undefined && { rating: updates.rating }),
-        ...(updates.comment !== undefined && { comment: updates.comment }),
+      const firestoreUpdates: any = {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      };
+
+      // Clean undefined values
+      Object.keys(firestoreUpdates).forEach(key => {
+        if (firestoreUpdates[key] === undefined) {
+          delete firestoreUpdates[key];
+        }
       });
+
+      await updateDoc(customerRef, firestoreUpdates);
     } finally {
       setIsUpdating(false);
     }

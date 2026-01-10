@@ -6,9 +6,12 @@ export interface Customer {
   ownerId: string;
   phone: string;
   name: string;
+  email?: string;
+  address?: string;
   rating: number;
   comment: string;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 export interface Order {
@@ -16,7 +19,6 @@ export interface Order {
   ownerId: string;
   customerId: string;
   phone: string;
-  customerName?: string;
   productDetails: string;
   price: number;
   orderDate: Date;

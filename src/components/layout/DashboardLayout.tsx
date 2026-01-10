@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -33,24 +34,36 @@ export function DashboardLayout({ children, businessName = 'My Business', onLogo
               </SheetTrigger>
               <SheetContent side="left" className="w-[280px] bg-card">
                 <nav className="flex flex-col gap-4 pt-8">
-                  <a
-                    href="/dashboard"
+                  <Link
+                    to="/dashboard"
                     className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <Package className="h-5 w-5" />
                     Orders
-                  </a>
+                  </Link>
+                  <Link
+                    to="/customers"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <User className="h-5 w-5" />
+                    Customers
+                  </Link>
                 </nav>
               </SheetContent>
             </Sheet>
-            
-            <a href="/dashboard" className="flex items-center gap-2">
+
+            <Link to="/dashboard" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
                 <Package className="h-4 w-4 text-primary-foreground" />
               </div>
               <span className="hidden font-semibold sm:inline-block">OrderFlow</span>
-            </a>
+            </Link>
+            <nav className="ml-6 hidden items-center gap-4 md:flex">
+              <Link to="/dashboard" className="text-sm font-medium transition-colors hover:text-primary">Orders</Link>
+              <Link to="/customers" className="text-sm font-medium transition-colors hover:text-primary">Customers</Link>
+            </nav>
           </div>
 
           <div className="flex items-center gap-4">

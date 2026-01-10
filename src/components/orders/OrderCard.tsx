@@ -26,6 +26,7 @@ interface OrderCardProps {
   order: Order;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
   onViewCustomer: (customerId: string) => void;
+  customerName?: string;
 }
 
 const sourceIcons = {
@@ -52,7 +53,7 @@ function formatDateTime(date: Date, hasTime: boolean): string {
   return hasTime ? `${datePart} at ${format(date, 'h:mm a')}` : datePart;
 }
 
-export function OrderCard({ order, onStatusChange, onViewCustomer }: OrderCardProps) {
+export function OrderCard({ order, onStatusChange, onViewCustomer, customerName }: OrderCardProps) {
   const navigate = useNavigate();
   const SourceIcon = sourceIcons[order.source];
   const isOverdue = isPast(order.deliveryDate) && order.status === 'pending';
@@ -82,7 +83,7 @@ export function OrderCard({ order, onStatusChange, onViewCustomer }: OrderCardPr
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold truncate">{order.customerName || order.phone}</h3>
+              <h3 className="font-semibold truncate">{customerName || order.phone}</h3>
               <Badge variant={order.source}>{sourceLabels[order.source]}</Badge>
             </div>
             <button

@@ -19,6 +19,7 @@ import { CalendarIcon, Loader2, ArrowLeft, Save, Star, MessageSquare } from 'luc
 import { cn } from '@/lib/utils';
 import { Order, OrderSource, Experience } from '@/types';
 import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
+import { useFirebaseCustomers } from '@/hooks/useFirebaseCustomers';
 import { useFirebaseExperience } from '@/hooks/useFirebaseExperience';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +32,7 @@ export default function OrderDetails() {
     const navigate = useNavigate();
     const { profile, signOut } = useFirebaseAuth();
     const { getOrderById, updateOrder, isUpdating } = useFirebaseOrders();
+    const { customers, isLoading: customersLoading } = useFirebaseCustomers();
     const { getExperienceByOrderId, createExperience, updateExperience, isLoading: experienceLoading } = useFirebaseExperience();
     const { toast } = useToast();
 
@@ -184,7 +186,7 @@ export default function OrderDetails() {
         navigate('/');
     };
 
-    if (loading) {
+    if (loading || customersLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -234,7 +236,9 @@ export default function OrderDetails() {
                 <div className="bg-card rounded-xl border p-6 shadow-sm space-y-8">
                     <div className="flex flex-col gap-1">
                         <h1 className="text-2xl font-bold">Order Details</h1>
-                        <p className="text-muted-foreground">{order.customerName} • {order.phone}</p>
+                        <p className="text-muted-foreground">
+                            {customers.find(c => c.id === order.customerId)?.name || 'Unknown Customer'} • {order.phone}
+                        </p>
                     </div>
 
                     <div className="grid gap-6">
@@ -387,6 +391,7 @@ export default function OrderDetails() {
                     open={experienceOpen}
                     onOpenChange={setExperienceOpen}
                     order={order}
+                    customerName={customers.find(c => c.id === order?.customerId)?.name}
                     targetStatus={targetFeedbackStatus}
                     initialRating={isEditingExperience ? experience?.rating : 0}
                     initialComment={isEditingExperience ? experience?.comment : ''}
