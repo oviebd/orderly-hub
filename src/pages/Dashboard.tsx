@@ -6,7 +6,7 @@ import { AddOrderDialog } from '@/components/orders/AddOrderDialog';
 import { CustomerDialog } from '@/components/customers/CustomerDialog';
 import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
 import { Button } from '@/components/ui/button';
-import { Plus, Package, Loader2, Search, ArrowUpDown } from 'lucide-react';
+import { Plus, Package, Loader2, Search, ArrowUpDown, ShoppingBag } from 'lucide-react';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
@@ -272,13 +272,36 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Permission Restriction Banner */}
+        {profile?.status === 'disabled' && (
+          <div className="bg-destructive text-destructive-foreground p-4 rounded-lg border animate-pulse">
+            <h2 className="font-semibold italic">Account Disabled</h2>
+            <p className="text-sm">Your account has been disabled by the administrator. Many features will be restricted.</p>
+          </div>
+        )}
+
+        {profile?.canCreateOrders === false && (
+          <div className="bg-amber-100 text-amber-800 p-4 rounded-lg border border-amber-200">
+            <h2 className="font-semibold flex items-center gap-2">
+              <ShoppingBag className="h-4 w-4" />
+              Order Creation Restricted
+            </h2>
+            <p className="text-sm">The administrator has restricted your capability to create new orders. Please contact support if this is an error.</p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
             <p className="text-muted-foreground">Manage your orders and track deliveries</p>
           </div>
-          <Button onClick={() => setAddOrderOpen(true)} size="lg" className="gap-2" disabled={isCreating}>
+          <Button
+            onClick={() => setAddOrderOpen(true)}
+            size="lg"
+            className="gap-2"
+            disabled={isCreating || profile?.canCreateOrders === false || profile?.status === 'disabled'}
+          >
             {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
             New Order
           </Button>
@@ -328,7 +351,11 @@ export default function Dashboard() {
                 }
               </p>
               {activeTab === 'all' && (
-                <Button onClick={() => setAddOrderOpen(true)} className="mt-4 gap-2">
+                <Button
+                  onClick={() => setAddOrderOpen(true)}
+                  className="mt-4 gap-2"
+                  disabled={profile?.canCreateOrders === false || profile?.status === 'disabled'}
+                >
                   <Plus className="h-4 w-4" />
                   Create Order
                 </Button>

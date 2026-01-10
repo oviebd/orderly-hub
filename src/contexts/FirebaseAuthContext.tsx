@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { 
+import {
   User,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -13,6 +13,9 @@ interface Profile {
   businessName: string;
   email: string;
   plan: 'free' | 'paid';
+  role: 'admin' | 'business';
+  status: 'enabled' | 'disabled';
+  canCreateOrders: boolean;
   createdAt: Date;
 }
 
@@ -21,6 +24,7 @@ interface FirebaseAuthContextType {
   profile: Profile | null;
   loading: boolean;
   signUp: (email: string, password: string, businessName: string) => Promise<{ error: Error | null }>;
+  adminSignUp: (email: string, password: string, businessName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -36,13 +40,16 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     try {
       const docRef = doc(db, 'users', userId);
       const docSnap = await getDoc(docRef);
-      
+
       if (docSnap.exists()) {
         const data = docSnap.data();
         return {
           businessName: data.businessName,
           email: data.email,
           plan: data.plan,
+          role: data.role || 'business',
+          status: data.status || 'enabled',
+          canCreateOrders: data.canCreateOrders ?? true,
           createdAt: data.createdAt?.toDate() || new Date(),
         } as Profile;
       }
@@ -56,14 +63,20 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      
+
       if (user) {
         const profileData = await fetchProfile(user.uid);
-        setProfile(profileData);
+        if (profileData?.status === 'disabled') {
+          await firebaseSignOut(auth);
+          setProfile(null);
+          setUser(null);
+        } else {
+          setProfile(profileData);
+        }
       } else {
         setProfile(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -73,22 +86,54 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, businessName: string) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
+
+      const newProfile = {
+        businessName,
+        email,
+        plan: 'free',
+        role: 'business',
+        status: 'enabled',
+        canCreateOrders: true,
+        createdAt: new Date(),
+      };
+
       // Create user profile in Firestore
       await setDoc(doc(db, 'users', userCredential.user.uid), {
+        ...newProfile,
+        role: 'business',
+        status: 'enabled',
+        canCreateOrders: true,
+      });
+
+      setProfile(newProfile as Profile);
+
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
+  const adminSignUp = async (email: string, password: string, businessName: string) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+      const newProfile = {
         businessName,
         email,
-        plan: 'free',
+        plan: 'paid', // Admins are usually on a special plan or just the highest
+        role: 'admin',
+        status: 'enabled',
+        canCreateOrders: true,
         createdAt: new Date(),
+      };
+
+      // Create admin profile in Firestore
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        ...newProfile,
       });
-      
-      setProfile({
-        businessName,
-        email,
-        plan: 'free',
-        createdAt: new Date(),
-      });
-      
+
+      setProfile(newProfile as Profile);
+
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -97,7 +142,14 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const profileData = await fetchProfile(userCredential.user.uid);
+
+      if (profileData?.status === 'disabled') {
+        await firebaseSignOut(auth);
+        return { error: new Error('Your account has been disabled. Please contact the administrator.') };
+      }
+
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -116,6 +168,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         signUp,
+        adminSignUp,
         signIn,
         signOut,
       }}
