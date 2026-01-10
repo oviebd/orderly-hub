@@ -93,7 +93,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         plan: 'free',
         role: 'business',
         status: 'enabled',
-        canCreateOrders: true,
+        canCreateOrders: false,
         createdAt: new Date(),
       };
 
@@ -102,7 +102,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         ...newProfile,
         role: 'business',
         status: 'enabled',
-        canCreateOrders: true,
+        canCreateOrders: false,
       });
 
       setProfile(newProfile as Profile);
