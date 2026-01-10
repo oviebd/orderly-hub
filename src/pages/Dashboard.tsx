@@ -8,16 +8,16 @@ import { Button } from '@/components/ui/button';
 import { Plus, Package, Loader2 } from 'lucide-react';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { useOrders } from '@/hooks/useOrders';
-import { useCustomers } from '@/hooks/useCustomers';
+import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
+import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
+import { useFirebaseCustomers } from '@/hooks/useFirebaseCustomers';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, profile, loading: authLoading, signOut } = useAuth();
-  const { orders, isLoading: ordersLoading, createOrder, updateOrderStatus, isCreating } = useOrders();
-  const { customers, isLoading: customersLoading, createCustomer, updateCustomer, findCustomerByPhone } = useCustomers();
+  const { user, profile, loading: authLoading, signOut } = useFirebaseAuth();
+  const { orders, isLoading: ordersLoading, createOrder, updateOrderStatus, isCreating } = useFirebaseOrders();
+  const { customers, isLoading: customersLoading, createCustomer, updateCustomer, findCustomerByPhone } = useFirebaseCustomers();
   const { toast } = useToast();
   
   const [activeTab, setActiveTab] = useState('all');
@@ -148,7 +148,7 @@ export default function Dashboard() {
 
       // Create order
       await createOrder({
-        ownerId: user!.id,
+        ownerId: user!.uid,
         customerId: customer.id,
         phone: orderData.phone,
         customerName: orderData.customerName || customer.name,
@@ -187,7 +187,7 @@ export default function Dashboard() {
   }
 
   return (
-    <DashboardLayout businessName={profile?.business_name || 'My Business'} onLogout={handleLogout}>
+    <DashboardLayout businessName={profile?.businessName || 'My Business'} onLogout={handleLogout}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
