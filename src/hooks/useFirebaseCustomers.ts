@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
+import {
+  collection,
+  query,
+  where,
+  orderBy,
   onSnapshot,
   addDoc,
   updateDoc,
@@ -33,11 +33,10 @@ export function useFirebaseCustomers() {
     const customersRef = collection(db, 'customers');
     const q = query(
       customersRef,
-      where('ownerId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('ownerId', '==', user.uid)
     );
 
-    const unsubscribe = onSnapshot(q, 
+    const unsubscribe = onSnapshot(q,
       (snapshot) => {
         const customersData = snapshot.docs.map(doc => {
           const data = doc.data();
@@ -67,7 +66,7 @@ export function useFirebaseCustomers() {
   const createCustomer = async (customer: Omit<Customer, 'id' | 'createdAt' | 'ownerId'>) => {
     if (!user) throw new Error('Not authenticated');
     setIsCreating(true);
-    
+
     try {
       const customersRef = collection(db, 'customers');
       const docRef = await addDoc(customersRef, {
@@ -78,7 +77,7 @@ export function useFirebaseCustomers() {
         comment: customer.comment,
         createdAt: serverTimestamp(),
       });
-      
+
       return {
         id: docRef.id,
         owner_id: user.uid,

@@ -16,10 +16,10 @@ import { useToast } from '@/hooks/use-toast';
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, profile, loading: authLoading, signOut } = useFirebaseAuth();
-  const { orders, isLoading: ordersLoading, createOrder, updateOrderStatus, isCreating } = useFirebaseOrders();
-  const { customers, isLoading: customersLoading, createCustomer, updateCustomer, findCustomerByPhone } = useFirebaseCustomers();
+  const { orders, isLoading: ordersLoading, error: ordersError, createOrder, updateOrderStatus, isCreating } = useFirebaseOrders();
+  const { customers, isLoading: customersLoading, error: customersError, createCustomer, updateCustomer, findCustomerByPhone } = useFirebaseCustomers();
   const { toast } = useToast();
-  
+
   const [activeTab, setActiveTab] = useState('all');
   const [addOrderOpen, setAddOrderOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -35,7 +35,7 @@ export default function Dashboard() {
   const getFilteredOrders = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     switch (activeTab) {
       case 'today':
         return orders.filter(order => {
@@ -53,7 +53,7 @@ export default function Dashboard() {
   const getStatusCounts = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     return {
       all: orders.length,
       today: orders.filter(order => {
@@ -126,7 +126,7 @@ export default function Dashboard() {
     try {
       // Check if customer exists
       let customer = findCustomerByPhone(orderData.phone);
-      
+
       if (!customer) {
         // Create new customer
         const newCustomer = await createCustomer({
@@ -189,6 +189,14 @@ export default function Dashboard() {
   return (
     <DashboardLayout businessName={profile?.businessName || 'My Business'} onLogout={handleLogout}>
       <div className="space-y-6">
+        {/* Error State */}
+        {(ordersError || customersError) && (
+          <div className="bg-destructive/15 text-destructive p-4 rounded-lg border border-destructive/20 animate-fade-in">
+            <h2 className="font-semibold">Error loading data</h2>
+            <p className="text-sm">{(ordersError || customersError)?.message}</p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -202,9 +210,9 @@ export default function Dashboard() {
         </div>
 
         {/* Status Tabs */}
-        <StatusTabs 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab} 
+        <StatusTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
           counts={statusCounts}
         />
 
@@ -215,7 +223,7 @@ export default function Dashboard() {
               <Package className="h-12 w-12 text-muted-foreground/50" />
               <h3 className="mt-4 text-lg font-medium">No orders found</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                {activeTab === 'all' 
+                {activeTab === 'all'
                   ? "Create your first order to get started"
                   : `No ${activeTab} orders at the moment`
                 }
@@ -248,7 +256,7 @@ export default function Dashboard() {
         onSubmit={handleAddOrder}
         customers={customers}
       />
-      
+
       <CustomerDialog
         customer={selectedCustomer}
         orders={orders}

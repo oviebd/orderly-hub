@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
+import {
+  collection,
+  query,
+  where,
+  orderBy,
   onSnapshot,
   addDoc,
   updateDoc,
@@ -32,11 +32,10 @@ export function useFirebaseOrders() {
     const ordersRef = collection(db, 'orders');
     const q = query(
       ordersRef,
-      where('ownerId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('ownerId', '==', user.uid)
     );
 
-    const unsubscribe = onSnapshot(q, 
+    const unsubscribe = onSnapshot(q,
       (snapshot) => {
         const ordersData = snapshot.docs.map(doc => {
           const data = doc.data();
@@ -71,7 +70,7 @@ export function useFirebaseOrders() {
   const createOrder = async (order: Omit<Order, 'id' | 'createdAt'>) => {
     if (!user) throw new Error('Not authenticated');
     setIsCreating(true);
-    
+
     try {
       const ordersRef = collection(db, 'orders');
       await addDoc(ordersRef, {
