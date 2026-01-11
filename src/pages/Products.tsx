@@ -4,9 +4,8 @@ import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Plus, Package } from 'lucide-react';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useNavigate, Link } from 'react-router-dom';
+import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 import { Product } from '@/types';
 import {
     Table,
@@ -19,41 +18,16 @@ import {
 
 export default function Products() {
     const { user, profile, loading: authLoading, signOut } = useFirebaseAuth();
+    const { products, isLoading: productsLoading } = useFirebaseProducts();
     const navigate = useNavigate();
 
-    const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(true);
+    // Combined loading state
+    const loading = authLoading || productsLoading;
 
     const handleLogout = async () => {
         await signOut();
         navigate('/');
     };
-
-    useEffect(() => {
-        if (!user) return;
-
-        const q = query(
-            collection(db, 'products'),
-            where('businessId', '==', user.uid),
-            orderBy('createdAt', 'desc')
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const productsData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate(),
-                updatedAt: doc.data().updatedAt?.toDate(),
-            })) as Product[];
-            setProducts(productsData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching products: ", error);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [user]);
 
     if (authLoading) {
         return (

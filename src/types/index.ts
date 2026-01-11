@@ -58,3 +58,14 @@ export interface Experience {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface Product {
+  id: string;
+  businessId: string;
+  name: string;
+  price: number;
+  details?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+

@@ -16,16 +16,30 @@ import BusinessProfile from "./pages/BusinessProfile";
 import Products from "./pages/Products";
 import AddProduct from "./pages/AddProduct";
 import NotFound from "./pages/NotFound";
+import RegisterBusiness from "./pages/RegisterBusiness";
 import { useFirebaseAuth } from "@/contexts/FirebaseAuthContext";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 const queryClient = new QueryClient();
 
 const ProtectedRoute = ({ children, role }: { children: React.ReactNode, role?: 'admin' | 'business' }) => {
   const { user, profile, loading } = useFirebaseAuth();
+  const location = useLocation();
 
   if (loading) return null;
   if (!user) return <Navigate to={role === 'admin' ? "/admin/login" : "/login"} />;
+
+  // If user is logged in, but has no business profile (onboarding required)
+  // and they are NOT trying to access register-business, redirect them there.
+  if (profile?.onboardingRequired && location.pathname !== '/register-business') {
+    return <Navigate to="/register-business" />;
+  }
+
+  // If user HAS business profile but tries to go to register-business, send to dashboard
+  if (!profile?.onboardingRequired && location.pathname === '/register-business') {
+    return <Navigate to="/dashboard" />;
+  }
+
   if (role && profile?.role !== role) {
     return <Navigate to={profile?.role === 'admin' ? "/admin/dashboard" : "/dashboard"} />;
   }
@@ -44,6 +58,12 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/admin/login" element={<AdminLogin />} />
+
+            <Route path="/register-business" element={
+              <ProtectedRoute role="business">
+                <RegisterBusiness />
+              </ProtectedRoute>
+            } />
 
             <Route path="/admin/dashboard" element={
               <ProtectedRoute role="admin">

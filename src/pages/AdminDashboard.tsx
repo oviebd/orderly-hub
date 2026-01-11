@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { db } from '@/lib/firebase';
+import { getBusinessRootPath } from '@/lib/utils';
 import { collection, query, getDocs, doc, updateDoc, addDoc, orderBy, limit, where, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -127,7 +128,9 @@ export default function AdminDashboard() {
 
                 // A. Fetch User Orders for Stats
                 // Using client-side filtering for dates to avoid complex compound indexes for every combination
-                const ordersQ = query(collection(db, 'orders'), where('ownerId', '==', statsOwner.id));
+                // Using client-side filtering for dates to avoid complex compound indexes for every combination
+                const rootPath = getBusinessRootPath(statsOwner.businessName, statsOwner.email);
+                const ordersQ = query(collection(db, rootPath, 'orders')); // No need to filter by ownerId as path is unique
                 const ordersSnap = await getDocs(ordersQ);
                 let orders = ordersSnap.docs.map(doc => doc.data());
 
@@ -183,7 +186,7 @@ export default function AdminDashboard() {
                     logsQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
                 }
                 const logsSnap = await getDocs(logsQuery);
-                const logsData = logsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
+                const logsData = logsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any } as ActivityLog));
                 setLogs(logsData);
             }
 

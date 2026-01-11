@@ -15,8 +15,7 @@ export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [businessName, setBusinessName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,7 +34,15 @@ export default function Login() {
           return;
         }
       } else {
-        const { error } = await signUp(email, password, businessName, phone);
+        if (password !== confirmPassword) {
+          toast({
+            title: 'Passwords do not match',
+            description: 'Please ensure both passwords are the same.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        const { error } = await signUp(email, password);
         if (error) {
           toast({
             title: 'Sign up failed',
@@ -46,9 +53,13 @@ export default function Login() {
         }
         toast({
           title: 'Account created!',
-          description: 'Welcome to OrderFlow. You are now logged in.',
+          description: 'Welcome to OrderFlow. Please complete your business registration.',
         });
       }
+      // Navigation will be handled by auth state change in App.tsx or we manually nav
+      // But for now keeping it simple.
+      // navigate('/dashboard'); // Let AuthContext or ProtectedRoute handle redirect?
+      // Actually standard is to wait for auth state change. But here we can just let it flow.
       navigate('/dashboard');
     } finally {
       setIsLoading(false);
@@ -82,32 +93,19 @@ export default function Login() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
-                <>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="businessName">Business Name</Label>
-                    <Input
-                      id="businessName"
-                      placeholder="e.g., Sweet Delights Bakery"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      required={!isLogin}
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="+1234567890"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      required={!isLogin}
-                      disabled={isLoading}
-                    />
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    disabled={isLoading}
+                  />
+                </div>
               )}
 
               <div className="space-y-2">

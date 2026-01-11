@@ -6,33 +6,36 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 interface Profile {
+  userId?: string;
   businessName: string;
-  userName?: string; // New field
-  phone?: string;    // New field
+  userName?: string;
+  phone?: string;
   email: string;
   plan: 'free' | 'paid';
   role: 'admin' | 'business';
   status: 'enabled' | 'disabled';
   canCreateOrders: boolean;
   createdAt: Date;
-  businessAddress?: string; // New field
-  businessUrl?: string; // New field
-  socialLinks?: {           // New field
+  businessAddress?: string;
+  businessUrl?: string;
+  socialLinks?: {
     whatsapp?: string;
     facebook?: string;
     youtube?: string;
   };
+  onboardingRequired?: boolean;
 }
 
 interface FirebaseAuthContextType {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  signUp: (email: string, password: string, businessName: string, phone: string, userName?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  registerBusiness: (businessName: string, phone: string, userName?: string) => Promise<{ error: Error | null }>;
   adminSignUp: (email: string, password: string, businessName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -45,48 +48,87 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-
-
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
+    let unsubscribeBusiness: (() => void) | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setUser(user);
 
       if (user) {
-        // Set up real-time listener for profile
-        const docRef = doc(db, 'users', user.uid);
-        unsubscribeProfile = onSnapshot(docRef, async (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            const profileData = {
-              businessName: data.businessName,
-              userName: data.userName,
-              phone: data.phone,
-              email: data.email,
-              plan: data.plan,
-              role: data.role || 'business',
-              status: data.status || 'enabled',
-              canCreateOrders: data.canCreateOrders ?? true,
-              createdAt: data.createdAt?.toDate() || new Date(),
-              businessAddress: data.businessAddress,
-              businessUrl: data.businessUrl,
-              socialLinks: data.socialLinks,
-            } as Profile;
+        setLoading(true);
+        // 1. Listen to 'users' collection for basic role/status
+        const userDocRef = doc(db, 'users', user.uid);
+        unsubscribeProfile = onSnapshot(userDocRef, async (userDocSnap) => {
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
 
-            if (profileData.status === 'disabled') {
+            if (userData.status === 'disabled') {
               await firebaseSignOut(auth);
               setProfile(null);
               setUser(null);
+              setLoading(false);
+              return;
+            }
+
+            if (userData.role === 'admin') {
+              // Admin profile is fully in 'users'
+              setProfile({
+                ...userData,
+                createdAt: userData.createdAt?.toDate() || new Date(),
+              } as Profile);
+              setLoading(false);
             } else {
-              setProfile(profileData);
+              // Business User: Check 'BusinessAccounts' for full profile
+              if (!user.email) {
+                setLoading(false);
+                return;
+              }
+
+              const businessDocRef = doc(db, 'BusinessAccounts', user.email);
+
+              if (unsubscribeBusiness) unsubscribeBusiness();
+
+              unsubscribeBusiness = onSnapshot(businessDocRef, (businessSnap) => {
+                if (businessSnap.exists()) {
+                  const businessData = businessSnap.data();
+                  const userProfile = businessData.profile || {};
+                  const businessProfile = businessData.business || {};
+
+                  // Merge separate nodes into one Profile object for the app context
+                  setProfile({
+                    ...userProfile,
+                    ...businessProfile,
+                    userId: user.uid,
+                    email: user.email!,
+                    role: 'business',
+                    status: userData.status || 'enabled',
+                    canCreateOrders: userData.canCreateOrders ?? true,
+                    createdAt: userProfile.createdAt?.toDate() || new Date(),
+                    onboardingRequired: false
+                  } as Profile);
+                } else {
+                  // User exists but Business Account doesn't -> Onboarding needed
+                  setProfile({
+                    email: user.email!,
+                    role: 'business',
+                    status: 'enabled',
+                    canCreateOrders: false,
+                    plan: 'free',
+                    businessName: '',
+                    createdAt: new Date(),
+                    onboardingRequired: true
+                  });
+                }
+                setLoading(false);
+              });
             }
           } else {
             setProfile(null);
+            setLoading(false);
           }
-          setLoading(false);
         }, (error) => {
-          console.error("Error listening to profile:", error);
+          console.error("Error listening to user profile:", error);
           setLoading(false);
         });
 
@@ -95,6 +137,10 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
           unsubscribeProfile();
           unsubscribeProfile = null;
         }
+        if (unsubscribeBusiness) {
+          unsubscribeBusiness();
+          unsubscribeBusiness = null;
+        }
         setProfile(null);
         setLoading(false);
       }
@@ -102,52 +148,22 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-      }
+      if (unsubscribeProfile) unsubscribeProfile();
+      if (unsubscribeBusiness) unsubscribeBusiness();
     };
   }, []);
 
-  const signUp = async (email: string, password: string, businessName: string, phone: string, userName: string = '') => {
+  const signUp = async (email: string, password: string) => {
     try {
-      // Check if phone number already exists
-      const phoneQuery = query(collection(db, 'users'), where('phone', '==', phone));
-      const phoneSnapshot = await getDocs(phoneQuery);
-
-      if (!phoneSnapshot.empty) {
-        return { error: new Error('Phone number already exists') };
-      }
-
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-      const newProfile = {
-        businessName,
-        userName,
-        phone,
-        email,
-        plan: 'free',
-        role: 'business',
-        status: 'enabled',
-        canCreateOrders: false,
-        createdAt: new Date(),
-        businessAddress: '',
-        businessUrl: '',
-        socialLinks: {
-          whatsapp: '',
-          facebook: '',
-          youtube: ''
-        }
-      };
-
-      // Create user profile in Firestore
+      // Create minimal user entry
       await setDoc(doc(db, 'users', userCredential.user.uid), {
-        ...newProfile,
+        email,
         role: 'business',
         status: 'enabled',
-        canCreateOrders: false,
+        createdAt: new Date(),
       });
-
-      setProfile(newProfile as Profile);
 
       return { error: null };
     } catch (error: any) {
@@ -158,6 +174,51 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const registerBusiness = async (businessName: string, phone: string, userName: string = '') => {
+    if (!user || !user.email) return { error: new Error("No authenticated user found") };
+
+    try {
+      const userProfile = {
+        userId: user.uid,
+        userName,
+        phone, // User's personal phone
+        email: user.email,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const newBusiness = {
+        businessName,
+        phone, // Business phone
+        businessAddress: '',
+        businessUrl: '',
+        socialLinks: {
+          whatsapp: '',
+          facebook: '',
+          youtube: ''
+        },
+        plan: 'free',
+        createdAt: new Date(),
+      };
+
+      await setDoc(doc(db, 'BusinessAccounts', user.email), {
+        profile: userProfile,
+        businesses: [newBusiness] // Store full details in array
+      });
+
+      // Update basic user info if needed
+      await setDoc(doc(db, 'users', user.uid), {
+        phone,
+        userName
+      }, { merge: true });
+
+      return { error: null };
+
+    } catch (error) {
+      return { error: error as Error };
+    }
+  }
+
   const adminSignUp = async (email: string, password: string, businessName: string) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -165,14 +226,13 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       const newProfile = {
         businessName,
         email,
-        plan: 'paid', // Admins are usually on a special plan or just the highest
+        plan: 'paid',
         role: 'admin',
         status: 'enabled',
         canCreateOrders: true,
         createdAt: new Date(),
       };
 
-      // Create admin profile in Firestore
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         ...newProfile,
       });
@@ -188,7 +248,6 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Check if disabled immediately
       const docRef = doc(db, 'users', userCredential.user.uid);
       const docSnap = await getDoc(docRef);
 
@@ -218,6 +277,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         signUp,
+        registerBusiness,
         adminSignUp,
         signIn,
         signOut,

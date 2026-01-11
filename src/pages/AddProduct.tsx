@@ -8,12 +8,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useNavigate, Link } from 'react-router-dom';
+import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 
 export default function AddProduct() {
     const { user, profile, loading: authLoading, signOut } = useFirebaseAuth();
+    const { createProduct } = useFirebaseProducts();
     const { toast } = useToast();
     const navigate = useNavigate();
 
@@ -51,13 +51,10 @@ export default function AddProduct() {
 
         setIsSaving(true);
         try {
-            await addDoc(collection(db, 'products'), {
-                businessId: user.uid,
+            await createProduct({
                 name,
                 price: Number(price),
-                details,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
+                details
             });
 
             toast({

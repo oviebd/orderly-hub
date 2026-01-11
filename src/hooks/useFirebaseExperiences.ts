@@ -6,23 +6,36 @@ import {
     onSnapshot
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getBusinessRootPath } from '@/lib/utils';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { Experience } from '@/types';
 
 export function useFirebaseExperiences() {
-    const { user } = useFirebaseAuth();
+    const { user, profile } = useFirebaseAuth();
     const [experiences, setExperiences] = useState<Experience[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
+    // Helper to get collection ref
+    const getCollectionRef = () => {
+        if (!profile?.businessName || !profile?.email) return null;
+        const rootPath = getBusinessRootPath(profile.businessName, profile.email);
+        return collection(db, rootPath, 'experiences');
+    };
+
     useEffect(() => {
-        if (!user) {
+        if (!user || !profile) {
             setExperiences([]);
             setIsLoading(false);
             return;
         }
 
-        const experiencesRef = collection(db, 'experiences');
+        const experiencesRef = getCollectionRef();
+        if (!experiencesRef) {
+            setIsLoading(false);
+            return;
+        }
+
         const q = query(
             experiencesRef,
             where('ownerId', '==', user.uid)
@@ -54,7 +67,7 @@ export function useFirebaseExperiences() {
         );
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, profile]);
 
     return {
         experiences,

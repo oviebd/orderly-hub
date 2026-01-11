@@ -14,25 +14,45 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getBusinessRootPath } from '@/lib/utils';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { Customer } from '@/types';
 
 export function useFirebaseCustomers() {
-  const { user } = useFirebaseAuth();
+  const { user, profile } = useFirebaseAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // Helper to get collection ref
+  const getCollectionRef = () => {
+    if (!profile?.businessName || !profile?.email) return null;
+    const rootPath = getBusinessRootPath(profile.businessName, profile.email);
+    return collection(db, rootPath, 'customers');
+  };
+
+  // Helper to get doc ref
+  const getDocRef = (id: string) => {
+    if (!profile?.businessName || !profile?.email) return null;
+    const rootPath = getBusinessRootPath(profile.businessName, profile.email);
+    return doc(db, rootPath, 'customers', id);
+  };
+
   useEffect(() => {
-    if (!user) {
+    if (!user || !profile) {
       setCustomers([]);
       setIsLoading(false);
       return;
     }
 
-    const customersRef = collection(db, 'customers');
+    const customersRef = getCollectionRef();
+    if (!customersRef) {
+      setIsLoading(false);
+      return;
+    }
+
     const q = query(
       customersRef,
       where('ownerId', '==', user.uid)
@@ -66,18 +86,21 @@ export function useFirebaseCustomers() {
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, profile]);
 
   const createCustomer = async (customer: Omit<Customer, 'id' | 'createdAt' | 'ownerId'>) => {
-    if (!user) throw new Error('Not authenticated');
-    setIsCreating(true);
+    if (!user || !profile) throw new Error('Not authenticated');
 
     // Normalize phone: keep only digits
     const normalizedPhone = customer.phone.replace(/\D/g, '');
     if (!normalizedPhone) throw new Error('Invalid phone number');
 
+    const customerRef = getDocRef(normalizedPhone);
+    if (!customerRef) throw new Error('Could not determine storage path');
+
+    setIsCreating(true);
+
     try {
-      const customerRef = doc(db, 'customers', normalizedPhone);
       const docSnap = await getDoc(customerRef);
 
       if (docSnap.exists()) {
@@ -128,9 +151,11 @@ export function useFirebaseCustomers() {
   };
 
   const updateCustomer = async ({ customerId, updates }: { customerId: string; updates: Partial<Customer> }) => {
+    const customerRef = getDocRef(customerId);
+    if (!customerRef) throw new Error('Could not determine storage path');
+
     setIsUpdating(true);
     try {
-      const customerRef = doc(db, 'customers', customerId);
       const firestoreUpdates: any = {
         ...updates,
         updatedAt: serverTimestamp(),

@@ -12,25 +12,46 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getBusinessRootPath } from '@/lib/utils';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { Order, OrderStatus, OrderSource } from '@/types';
 
 export function useFirebaseOrders() {
-  const { user } = useFirebaseAuth();
+  const { user, profile } = useFirebaseAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // Helper to get collection ref
+  const getCollectionRef = () => {
+    if (!profile?.businessName || !profile?.email) return null;
+    const rootPath = getBusinessRootPath(profile.businessName, profile.email);
+    return collection(db, rootPath, 'orders');
+  };
+
+  // Helper to get doc ref
+  const getDocRef = (id: string) => {
+    if (!profile?.businessName || !profile?.email) return null;
+    const rootPath = getBusinessRootPath(profile.businessName, profile.email);
+    return doc(db, rootPath, 'orders', id);
+  };
+
   useEffect(() => {
-    if (!user) {
+    if (!user || !profile) {
       setOrders([]);
       setIsLoading(false);
       return;
     }
 
-    const ordersRef = collection(db, 'orders');
+    const ordersRef = getCollectionRef();
+    if (!ordersRef) {
+      console.error("Could not determine storage path. Missing business name or email.");
+      setIsLoading(false);
+      return;
+    }
+
     const q = query(
       ordersRef,
       where('ownerId', '==', user.uid)
@@ -69,14 +90,16 @@ export function useFirebaseOrders() {
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, profile]);
 
   const createOrder = async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (!user) throw new Error('Not authenticated');
+    if (!user || !profile) throw new Error('Not authenticated');
+    const ordersRef = getCollectionRef();
+    if (!ordersRef) throw new Error('Could not determine storage path');
+
     setIsCreating(true);
 
     try {
-      const ordersRef = collection(db, 'orders');
       await addDoc(ordersRef, {
         ownerId: user.uid,
         customerId: order.customerId || null,
@@ -99,9 +122,11 @@ export function useFirebaseOrders() {
   };
 
   const updateOrderStatus = async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
+    const orderRef = getDocRef(orderId);
+    if (!orderRef) throw new Error('Could not determine storage path');
+
     setIsUpdating(true);
     try {
-      const orderRef = doc(db, 'orders', orderId);
       await updateDoc(orderRef, {
         status,
         updatedAt: serverTimestamp()
@@ -113,7 +138,9 @@ export function useFirebaseOrders() {
 
   const getOrderById = async (orderId: string) => {
     try {
-      const orderRef = doc(db, 'orders', orderId);
+      const orderRef = getDocRef(orderId);
+      if (!orderRef) return null;
+
       const docSnap = await getDoc(orderRef);
 
       if (docSnap.exists()) {
@@ -144,9 +171,11 @@ export function useFirebaseOrders() {
   };
 
   const updateOrder = async (orderId: string, updates: Partial<Order>) => {
+    const orderRef = getDocRef(orderId);
+    if (!orderRef) throw new Error('Could not determine storage path');
+
     setIsUpdating(true);
     try {
-      const orderRef = doc(db, 'orders', orderId);
       const firestoreUpdates: any = {
         ...updates,
         updatedAt: serverTimestamp()
