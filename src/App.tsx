@@ -13,6 +13,8 @@ import Customers from "./pages/Customers";
 import CustomerDetails from "./pages/CustomerDetails";
 import OrderDetails from "./pages/OrderDetails";
 import BusinessProfile from "./pages/BusinessProfile";
+import Products from "./pages/Products";
+import AddProduct from "./pages/AddProduct";
 import NotFound from "./pages/NotFound";
 import { useFirebaseAuth } from "@/contexts/FirebaseAuthContext";
 import { Navigate } from "react-router-dom";
@@ -76,6 +78,18 @@ const App = () => (
             <Route path="/profile" element={
               <ProtectedRoute role="business">
                 <BusinessProfile />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/products" element={
+              <ProtectedRoute role="business">
+                <Products />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/products/new" element={
+              <ProtectedRoute role="business">
+                <AddProduct />
               </ProtectedRoute>
             } />
 
