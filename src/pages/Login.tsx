@@ -16,6 +16,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,7 +35,7 @@ export default function Login() {
           return;
         }
       } else {
-        const { error } = await signUp(email, password, businessName);
+        const { error } = await signUp(email, password, businessName, phone);
         if (error) {
           toast({
             title: 'Sign up failed',
@@ -72,8 +73,8 @@ export default function Login() {
               {isLogin ? 'Welcome back' : 'Create an account'}
             </CardTitle>
             <CardDescription>
-              {isLogin 
-                ? 'Enter your email to sign in to your account' 
+              {isLogin
+                ? 'Enter your email to sign in to your account'
                 : 'Enter your details to get started'
               }
             </CardDescription>
@@ -81,19 +82,34 @@ export default function Login() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
-                <div className="space-y-2">
-                  <Label htmlFor="businessName">Business Name</Label>
-                  <Input
-                    id="businessName"
-                    placeholder="e.g., Sweet Delights Bakery"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    required={!isLogin}
-                    disabled={isLoading}
-                  />
-                </div>
+                <>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="businessName">Business Name</Label>
+                    <Input
+                      id="businessName"
+                      placeholder="e.g., Sweet Delights Bakery"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      required={!isLogin}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+1234567890"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      required={!isLogin}
+                      disabled={isLoading}
+                    />
+                  </div>
+                </>
               )}
-              
+
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -106,7 +122,7 @@ export default function Login() {
                   disabled={isLoading}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <Input

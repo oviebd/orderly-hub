@@ -35,9 +35,17 @@ export interface Order {
 export interface User {
   id: string;
   businessName: string;
+  phone?: string;
+  userName?: string;
   email: string;
   plan: 'free' | 'paid';
   createdAt: Date;
+  businessAddress?: string;
+  socialLinks?: {
+    whatsapp?: string;
+    facebook?: string;
+    youtube?: string;
+  };
 }
 
 export interface Experience {

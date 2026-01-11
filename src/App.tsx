@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Customers from "./pages/Customers";
 import CustomerDetails from "./pages/CustomerDetails";
 import OrderDetails from "./pages/OrderDetails";
+import BusinessProfile from "./pages/BusinessProfile";
 import NotFound from "./pages/NotFound";
 import { useFirebaseAuth } from "@/contexts/FirebaseAuthContext";
 import { Navigate } from "react-router-dom";
@@ -69,6 +70,12 @@ const App = () => (
             <Route path="/orders/:orderId" element={
               <ProtectedRoute role="business">
                 <OrderDetails />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/profile" element={
+              <ProtectedRoute role="business">
+                <BusinessProfile />
               </ProtectedRoute>
             } />
 

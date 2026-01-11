@@ -82,6 +82,13 @@ export function DashboardLayout({ children, businessName = 'My Business', onLogo
                   <p className="text-xs text-muted-foreground">Free Plan</p>
                 </div>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="cursor-pointer w-full flex items-center">
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onLogout} className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out
