@@ -149,8 +149,22 @@ export function useFirebaseCustomers() {
     }
   };
 
-  const findCustomerByPhone = (phone: string) => {
-    return customers.find(c => c.phone === phone);
+  const findCustomerByPhone = (inputPhone: string) => {
+    const normalizedInput = inputPhone.replace(/\D/g, '');
+
+    return customers.find(c => {
+      const normalizedC = (c.phone || '').replace(/\D/g, '');
+
+      // Exact match
+      if (normalizedC === normalizedInput) return true;
+
+      // Suffix match
+      if (normalizedInput.length >= 8 && normalizedC.length >= 8) {
+        return normalizedC.endsWith(normalizedInput) || normalizedInput.endsWith(normalizedC);
+      }
+
+      return false;
+    });
   };
 
   return {

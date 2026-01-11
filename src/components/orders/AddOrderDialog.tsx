@@ -59,10 +59,20 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers }: AddO
     const normalizedInput = value.replace(/\D/g, '');
 
     // Look up customer by normalized phone
-    if (normalizedInput.length >= 5) { // Only search if we have a reasonable length
+    if (normalizedInput.length >= 5) {
       const customer = customers.find(c => {
-        const normalizedC = c.phone.replace(/\D/g, '');
-        return normalizedC === normalizedInput || c.id === normalizedInput;
+        const normalizedC = (c.phone || '').replace(/\D/g, '');
+
+        // Exact match
+        if (normalizedC === normalizedInput || c.id === normalizedInput) return true;
+
+        // Suffix match (to handle country codes like 88017... vs 017...)
+        // Only do this if we have at least 8 digits to avoid false positives
+        if (normalizedInput.length >= 8 && normalizedC.length >= 8) {
+          return normalizedC.endsWith(normalizedInput) || normalizedInput.endsWith(normalizedC);
+        }
+
+        return false;
       });
 
       if (customer) {
