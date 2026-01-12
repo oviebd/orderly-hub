@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getBusinessRootPath(businessName: string, email: string): string {
-  const sanitizedBusinessName = businessName.replace(/[^a-zA-Z0-9]/g, '_');
-  const sanitizedEmail = email.replace(/[^a-zA-Z0-9]/g, '_');
-  return `businesses/${sanitizedBusinessName}_${sanitizedEmail}`;
+  // businessName is kept as argument for compatibility but unused for path generation
+  // to ensure data is always under the unique immutable email key
+  return `BusinessAccounts/${email}`;
 }

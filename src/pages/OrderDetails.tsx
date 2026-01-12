@@ -15,7 +15,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
-import { CalendarIcon, Loader2, ArrowLeft, Save, Star, MessageSquare } from 'lucide-react';
+import { CalendarIcon, Loader2, ArrowLeft, Save, Star, MessageSquare, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Order, OrderSource, Experience } from '@/types';
 import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
@@ -31,7 +31,7 @@ export default function OrderDetails() {
     const { orderId } = useParams();
     const navigate = useNavigate();
     const { profile, signOut } = useFirebaseAuth();
-    const { getOrderById, updateOrder, isUpdating } = useFirebaseOrders();
+    const { getOrderById, updateOrder, deleteOrder, isUpdating } = useFirebaseOrders();
     const { customers, isLoading: customersLoading } = useFirebaseCustomers();
     const { getExperienceByOrderId, createExperience, updateExperience, isLoading: experienceLoading } = useFirebaseExperience();
     const { toast } = useToast();
@@ -215,6 +215,20 @@ export default function OrderDetails() {
                         <ArrowLeft className="h-4 w-4" /> Back
                     </Button>
                     <div className="flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={async () => {
+                                if (confirm('Are you sure you want to delete this order?')) {
+                                    await deleteOrder(orderId!);
+                                    toast({ title: 'Order deleted' });
+                                    navigate('/dashboard');
+                                }
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
                         <Select value={order.status} onValueChange={(v) => handleStatusChange(v as OrderStatus)}>
                             <SelectTrigger className="w-[140px] h-9">
                                 <SelectValue />
@@ -237,7 +251,7 @@ export default function OrderDetails() {
                     <div className="flex flex-col gap-1">
                         <h1 className="text-2xl font-bold">Order Details</h1>
                         <p className="text-muted-foreground">
-                            {customers.find(c => c.id === order.customerId)?.name || 'Unknown Customer'} • {order.phone}
+                            {customers.find(c => c.id === order.customerId)?.name || 'Unknown Customer'} • {customers.find(c => c.id === order.customerId)?.phone}
                         </p>
                     </div>
 

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, ArrowUpDown, User, Mail, Phone, Calendar, DollarSign, Package, Star } from 'lucide-react';
+import { Loader2, Search, ArrowUpDown, User, Mail, Phone, Calendar, DollarSign, Package, Star, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
@@ -15,7 +15,7 @@ export default function Customers() {
     const navigate = useNavigate();
     const { profile, signOut } = useFirebaseAuth();
     const { orders, isLoading: ordersLoading } = useFirebaseOrders();
-    const { customers, isLoading: customersLoading } = useFirebaseCustomers();
+    const { customers, isLoading: customersLoading, deleteCustomer } = useFirebaseCustomers();
     const { experiences, isLoading: experiencesLoading } = useFirebaseExperiences();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -149,7 +149,7 @@ export default function Customers() {
                                 className="group relative flex flex-col justify-between rounded-xl border bg-card p-5 transition-all hover:shadow-md cursor-pointer hover:border-primary/50"
                             >
                                 <div className="space-y-4">
-                                    <div className="flex items-start justify-between">
+                                    <div className="flex items-start justify-between relative">
                                         <div className="flex items-center gap-3">
                                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
                                                 <span className="text-sm font-bold text-primary">
@@ -171,6 +171,19 @@ export default function Customers() {
                                                 </div>
                                             </div>
                                         </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 -mt-1 -mr-2"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (confirm('Are you sure you want to delete this customer?')) {
+                                                    deleteCustomer(customer.id);
+                                                }
+                                            }}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
                                     </div>
 
                                     <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">

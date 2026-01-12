@@ -3,7 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, Package } from 'lucide-react';
+import { Loader2, Plus, Package, Trash2 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 import { Product } from '@/types';
@@ -18,7 +18,7 @@ import {
 
 export default function Products() {
     const { user, profile, loading: authLoading, signOut } = useFirebaseAuth();
-    const { products, isLoading: productsLoading } = useFirebaseProducts();
+    const { products, isLoading: productsLoading, deleteProduct } = useFirebaseProducts();
     const navigate = useNavigate();
 
     // Combined loading state
@@ -97,6 +97,20 @@ export default function Products() {
                                             </TableCell>
                                             <TableCell className="text-right text-muted-foreground">
                                                 {product.createdAt?.toLocaleDateString()}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-destructive hover:bg-destructive/10"
+                                                    onClick={async () => {
+                                                        if (confirm('Are you sure you want to delete this product?')) {
+                                                            await deleteProduct(product.id);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     ))}

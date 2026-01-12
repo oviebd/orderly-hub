@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowLeft, Save, Star, Phone, Mail, MapPin, Calendar, Package, User } from 'lucide-react';
+import { Loader2, ArrowLeft, Save, Star, Phone, Mail, MapPin, Calendar, Package, User, Trash2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
@@ -21,7 +21,7 @@ export default function CustomerDetails() {
     const navigate = useNavigate();
     const { profile, signOut } = useFirebaseAuth();
     const { orders, isLoading: ordersLoading } = useFirebaseOrders();
-    const { customers, isLoading: customersLoading, updateCustomer, isUpdating } = useFirebaseCustomers();
+    const { customers, isLoading: customersLoading, updateCustomer, deleteCustomer, isUpdating } = useFirebaseCustomers();
     const { experiences, isLoading: experiencesLoading } = useFirebaseExperiences();
     const { toast } = useToast();
 
@@ -114,6 +114,25 @@ export default function CustomerDetails() {
                     >
                         <ArrowLeft className="h-4 w-4" />
                         Back to Customers
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-2"
+                        onClick={async () => {
+                            if (confirm('Are you sure you want to delete this customer? This action cannot be undone.')) {
+                                if (id) {
+                                    await deleteCustomer(id);
+                                    toast({
+                                        title: 'Customer deleted',
+                                        description: 'Customer has been removed permanently.'
+                                    });
+                                    navigate('/customers');
+                                }
+                            }
+                        }}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        Delete Customer
                     </Button>
                 </div>
 

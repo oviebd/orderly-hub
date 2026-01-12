@@ -11,7 +11,8 @@ import {
   serverTimestamp,
   getDocs,
   setDoc,
-  getDoc
+  getDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getBusinessRootPath } from '@/lib/utils';
@@ -95,15 +96,19 @@ export function useFirebaseCustomers() {
     const normalizedPhone = customer.phone.replace(/\D/g, '');
     if (!normalizedPhone) throw new Error('Invalid phone number');
 
-    const customerRef = getDocRef(normalizedPhone);
-    if (!customerRef) throw new Error('Could not determine storage path');
+    const collectionRef = getCollectionRef();
+    if (!collectionRef) throw new Error('Could not determine storage path');
 
     setIsCreating(true);
 
     try {
-      const docSnap = await getDoc(customerRef);
+      // Check for existing customer with same phone manually since ID is now UUID
+      // This is a bit more expensive than direct ID lookup but necessary for UUID approach
+      const q = query(collectionRef, where('phone', '==', customer.phone)); // Or use normalized if searching normalized
+      const querySnapshot = await getDocs(q);
 
-      if (docSnap.exists()) {
+      if (!querySnapshot.empty) {
+        const docSnap = querySnapshot.docs[0];
         const existingData = docSnap.data();
         return {
           id: docSnap.id,
@@ -118,6 +123,12 @@ export function useFirebaseCustomers() {
           updatedAt: existingData.updatedAt?.toDate() || undefined,
         } as Customer;
       }
+
+      // Generate new UUID-like ID
+      const newId = crypto.randomUUID();
+      const customerRef = getDocRef(newId);
+      if (!customerRef) throw new Error('Could not determine storage path');
+
 
       const newCustomerData = {
         ownerId: user.uid,
@@ -134,7 +145,7 @@ export function useFirebaseCustomers() {
       await setDoc(customerRef, newCustomerData);
 
       return {
-        id: normalizedPhone,
+        id: newId,
         ownerId: user.uid,
         phone: customer.phone,
         name: customer.name,
@@ -192,12 +203,25 @@ export function useFirebaseCustomers() {
     });
   };
 
+  const deleteCustomer = async (customerId: string) => {
+    const customerRef = getDocRef(customerId);
+    if (!customerRef) throw new Error('Could not determine storage path');
+
+    try {
+      await deleteDoc(customerRef);
+    } catch (err) {
+      console.error("Error deleting customer:", err);
+      throw err;
+    }
+  };
+
   return {
     customers,
     isLoading,
     error,
     createCustomer,
     updateCustomer,
+    deleteCustomer,
     findCustomerByPhone,
     isCreating,
     isUpdating,

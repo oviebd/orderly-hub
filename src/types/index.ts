@@ -2,7 +2,7 @@ export type OrderStatus = 'pending' | 'confirmed' | 'delivered' | 'cancelled';
 export type OrderSource = 'whatsapp' | 'messenger' | 'phone';
 
 export interface Customer {
-  id: string;
+  id: string; // Unique UUID
   ownerId: string;
   phone: string;
   name: string;
@@ -17,9 +17,13 @@ export interface Customer {
 export interface Order {
   id: string;
   ownerId: string;
+  businessId: string; // ID of the business account
   customerId: string;
-  phone: string;
-  productDetails: string;
+  // phone removed as per request, linked via customerId
+  productId?: string;
+  productName: string;
+  productDetails?: string;
+  address?: string;
   price: number;
   orderDate: Date;
   deliveryDate: Date;
@@ -61,8 +65,11 @@ export interface Experience {
 
 export interface Product {
   id: string;
+  ownerId: string; // User ID of the business owner
   businessId: string;
+  code?: string; // Unique product code
   name: string;
+  productName?: string;
   price: number;
   details?: string;
   createdAt?: Date;

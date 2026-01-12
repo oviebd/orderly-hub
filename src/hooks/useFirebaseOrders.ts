@@ -9,7 +9,8 @@ import {
   updateDoc,
   doc,
   getDoc,
-  serverTimestamp
+  serverTimestamp,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getBusinessRootPath } from '@/lib/utils';
@@ -64,9 +65,13 @@ export function useFirebaseOrders() {
           return {
             id: doc.id,
             ownerId: data.ownerId,
+            businessId: data.businessId,
             customerId: data.customerId || '',
-            phone: data.phone,
-            productDetails: data.productDetails,
+            // phone linked via customerId now
+            productId: data.productId,
+            productName: data.productName || data.productDetails || 'Unknown Product',
+            address: data.address,
+            productDetails: data.productDetails || '',
             price: Number(data.price),
             orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
             deliveryDate: data.deliveryDate?.toDate() || new Date(),
@@ -102,9 +107,13 @@ export function useFirebaseOrders() {
     try {
       await addDoc(ordersRef, {
         ownerId: user.uid,
+        businessId: profile.businessId || profile.email, // Fallback to email if businessId missing (redundancy), or better yet, error. But wait, we added businessId to profile recently.
         customerId: order.customerId || null,
-        phone: order.phone,
-        productDetails: order.productDetails,
+        // phone: order.phone, // Removed phone as per request
+        productId: order.productId || null,
+        productName: order.productName,
+        address: order.address || '',
+        productDetails: order.productDetails || '',
         price: order.price,
         orderDate: order.orderDate,
         deliveryDate: order.deliveryDate,
@@ -148,9 +157,12 @@ export function useFirebaseOrders() {
         return {
           id: docSnap.id,
           ownerId: data.ownerId,
+          businessId: data.businessId,
           customerId: data.customerId || '',
-          phone: data.phone,
-          productDetails: data.productDetails,
+          productId: data.productId,
+          productName: data.productName || data.productDetails || 'Unknown Product',
+          address: data.address,
+          productDetails: data.productDetails || '',
           price: Number(data.price),
           orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
           deliveryDate: data.deliveryDate?.toDate() || new Date(),
@@ -190,6 +202,18 @@ export function useFirebaseOrders() {
     }
   };
 
+  const deleteOrder = async (orderId: string) => {
+    const orderRef = getDocRef(orderId);
+    if (!orderRef) throw new Error('Could not determine storage path');
+
+    try {
+      await deleteDoc(orderRef);
+    } catch (err) {
+      console.error("Error deleting order:", err);
+      throw err;
+    }
+  };
+
   return {
     orders,
     isLoading,
@@ -197,6 +221,7 @@ export function useFirebaseOrders() {
     createOrder,
     updateOrderStatus,
     updateOrder,
+    deleteOrder,
     getOrderById,
     isCreating,
     isUpdating,

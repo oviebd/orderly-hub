@@ -11,6 +11,7 @@ import { auth, db } from '@/lib/firebase';
 
 interface Profile {
   userId?: string;
+  businessId?: string;
   businessName: string;
   userName?: string;
   phone?: string;
@@ -93,7 +94,13 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
                 if (businessSnap.exists()) {
                   const businessData = businessSnap.data();
                   const userProfile = businessData.profile || {};
-                  const businessProfile = businessData.business || {};
+                  // Handle both structure types (legacy vs new array)
+                  let businessProfile = {};
+                  if (businessData.businesses && Array.isArray(businessData.businesses) && businessData.businesses.length > 0) {
+                    businessProfile = businessData.businesses[0];
+                  } else {
+                    businessProfile = businessData.business || {};
+                  }
 
                   // Merge separate nodes into one Profile object for the app context
                   setProfile({
@@ -188,6 +195,7 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
       };
 
       const newBusiness = {
+        businessId: crypto.randomUUID(),
         businessName,
         phone, // Business phone
         businessAddress: '',

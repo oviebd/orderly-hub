@@ -71,7 +71,7 @@ export default function Dashboard() {
         const customer = customers.find(c => c.id === order.customerId);
         return (
           customer?.name.toLowerCase().includes(q) ||
-          order.phone.includes(q) ||
+          customer?.phone.includes(q) ||
           order.productDetails.toLowerCase().includes(q)
         );
       });
@@ -193,9 +193,10 @@ export default function Dashboard() {
   };
 
   const handleAddOrder = async (orderData: {
-    phone: string;
-    customerName: string;
-    productDetails: string;
+    customerId: string;
+    productId?: string;
+    productName: string;
+    productDetails?: string;
     price: number;
     orderDate: Date;
     deliveryDate: Date;
@@ -203,28 +204,17 @@ export default function Dashboard() {
     hasDeliveryTime: boolean;
     source: OrderSource;
     notes: string;
+    address?: string;
   }) => {
     try {
-      // Check if customer exists
-      let customer = findCustomerByPhone(orderData.phone);
-
-      if (!customer) {
-        // Create new customer
-        const newCustomer = await createCustomer({
-          phone: orderData.phone,
-          name: orderData.customerName || 'Unknown',
-          rating: 0,
-          comment: '',
-        });
-        customer = newCustomer;
-      }
-
-      // Create order
+      // Customer creation is handled inside AddOrderDialog
       await createOrder({
         ownerId: user!.uid,
-        customerId: customer.id,
-        phone: orderData.phone,
-        productDetails: orderData.productDetails,
+        businessId: profile!.businessId!,
+        customerId: orderData.customerId,
+        productId: orderData.productId,
+        productName: orderData.productName,
+        productDetails: orderData.productDetails || '',
         price: orderData.price,
         orderDate: orderData.orderDate,
         deliveryDate: orderData.deliveryDate,
@@ -233,6 +223,7 @@ export default function Dashboard() {
         status: 'pending',
         source: orderData.source,
         notes: orderData.notes,
+        address: orderData.address,
       });
 
       toast({
@@ -240,6 +231,7 @@ export default function Dashboard() {
         description: 'New order added successfully',
       });
     } catch (error) {
+      console.error(error);
       toast({
         title: 'Error',
         description: 'Failed to create order',
