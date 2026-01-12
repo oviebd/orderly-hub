@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, ArrowUpDown, User, Mail, Phone, Calendar, DollarSign, Package, Star, Trash2 } from 'lucide-react';
+import { Loader2, Search, ArrowUpDown, User, Mail, Phone, Calendar, DollarSign, Package, Star, Trash2, Download, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
@@ -10,17 +10,20 @@ import { useFirebaseCustomers } from '@/hooks/useFirebaseCustomers';
 import { useFirebaseExperiences } from '@/hooks/useFirebaseExperiences';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 
 export default function Customers() {
     const navigate = useNavigate();
     const { profile, signOut } = useFirebaseAuth();
     const { orders, isLoading: ordersLoading } = useFirebaseOrders();
-    const { customers, isLoading: customersLoading, deleteCustomer } = useFirebaseCustomers();
+    const { customers, isLoading: customersLoading, deleteCustomer, createCustomer } = useFirebaseCustomers();
     const { experiences, isLoading: experiencesLoading } = useFirebaseExperiences();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [sortField, setSortField] = useState<'name' | 'lastOrder'>('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const customerStats = useMemo(() => {
         return customers.map(customer => {
@@ -82,6 +85,101 @@ export default function Customers() {
         }
     };
 
+    const handleExport = () => {
+        const dataToExport = customerStats.map(c => ({
+            'Owner ID': c.ownerId,
+            Name: c.name,
+            Phone: c.phone,
+            Email: c.email || '',
+            Address: c.address || '',
+            'Total Orders': c.totalOrders,
+            'Total Spend': c.totalSpend,
+            'Rating': c.calculatedRating.toFixed(1),
+            'Last Order': c.lastOrder ? format(c.lastOrder, 'yyyy-MM-dd') : '',
+            'Created At': format(c.createdAt, 'yyyy-MM-dd'),
+            'Comment': c.comment || ''
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Customers");
+        XLSX.writeFile(wb, "Customers.xlsx");
+        toast.success("Customers exported successfully");
+    };
+
+    const handleImportClick = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const bstr = evt.target?.result;
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws);
+
+                let successCount = 0;
+                let errorCount = 0;
+
+                for (const row of data as any[]) {
+                    try {
+                        // Basic validation
+                        if (!row.Name || !row.Phone) {
+                            console.warn("Skipping invalid row:", row);
+                            continue;
+                        }
+
+                        const createdAt = row['Created At'] ? new Date(row['Created At']) : undefined;
+                        // Use provided date, or if invalid/missing, undefined (hook uses default)
+                        const validCreatedAt = createdAt && !isNaN(createdAt.getTime()) ? createdAt : undefined;
+
+                        // Try to get update date, fallback to Last Order date, else undefined
+                        const updatedAtString = row['Updated At'] || row['Last Order'];
+                        const updatedAt = updatedAtString ? new Date(updatedAtString) : undefined;
+                        const validUpdatedAt = updatedAt && !isNaN(updatedAt.getTime()) ? updatedAt : undefined;
+
+
+                        await createCustomer({
+                            ownerId: row['Owner ID'],
+                            name: row.Name,
+                            phone: String(row.Phone),
+                            email: row.Email || '',
+                            address: row.Address || '',
+                            rating: parseFloat(row.Rating) || 0,
+                            comment: row.Comment || '',
+                            createdAt: validCreatedAt,
+                            updatedAt: validUpdatedAt,
+                        });
+                        successCount++;
+                    } catch (error) {
+                        console.error("Error importing row:", row, error);
+                        errorCount++;
+                    }
+                }
+
+                toast.success(`Import complete. Added/Updated: ${successCount}, Failed/Skipped: ${errorCount}`);
+
+            } catch (error) {
+                console.error("Error parsing file:", error);
+                toast.error("Failed to parse Excel file");
+            } finally {
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                }
+            }
+        };
+        reader.readAsBinaryString(file);
+    };
+
+
     if (ordersLoading || customersLoading || experiencesLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
@@ -97,6 +195,23 @@ export default function Customers() {
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
                         <p className="text-muted-foreground">Manage your customer relationships and view order history</p>
+                    </div>
+                    <div className="flex w-full sm:w-auto gap-2">
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept=".xlsx, .xls"
+                            className="hidden"
+                        />
+                        <Button variant="outline" onClick={handleImportClick} className="w-full sm:w-auto gap-2">
+                            <Upload className="h-4 w-4" />
+                            Import
+                        </Button>
+                        <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto gap-2">
+                            <Download className="h-4 w-4" />
+                            Export
+                        </Button>
                     </div>
                 </div>
 

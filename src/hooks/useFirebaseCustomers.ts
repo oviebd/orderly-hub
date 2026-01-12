@@ -89,7 +89,7 @@ export function useFirebaseCustomers() {
     return () => unsubscribe();
   }, [user, profile]);
 
-  const createCustomer = async (customer: Omit<Customer, 'id' | 'createdAt' | 'ownerId'>) => {
+  const createCustomer = async (customer: Omit<Customer, 'id' | 'createdAt' | 'ownerId'> & { ownerId?: string; createdAt?: Date; updatedAt?: Date }) => {
     if (!user || !profile) throw new Error('Not authenticated');
 
     // Normalize phone: keep only digits
@@ -108,6 +108,7 @@ export function useFirebaseCustomers() {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
+        // Customer already exists, return existing
         const docSnap = querySnapshot.docs[0];
         const existingData = docSnap.data();
         return {
@@ -129,32 +130,35 @@ export function useFirebaseCustomers() {
       const customerRef = getDocRef(newId);
       if (!customerRef) throw new Error('Could not determine storage path');
 
+      const ownerIdToUse = customer.ownerId || user.uid;
+      const createdAtToUse = customer.createdAt ? customer.createdAt : serverTimestamp();
+      const updatedAtToUse = customer.updatedAt ? customer.updatedAt : serverTimestamp();
 
       const newCustomerData = {
-        ownerId: user.uid,
+        ownerId: ownerIdToUse,
         phone: customer.phone, // Store original format for display
         name: customer.name,
         email: customer.email || '',
         address: customer.address || '',
         rating: customer.rating,
         comment: customer.comment,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: createdAtToUse,
+        updatedAt: updatedAtToUse,
       };
 
       await setDoc(customerRef, newCustomerData);
 
       return {
         id: newId,
-        ownerId: user.uid,
+        ownerId: ownerIdToUse,
         phone: customer.phone,
         name: customer.name,
         email: customer.email || '',
         address: customer.address || '',
         rating: customer.rating,
         comment: customer.comment,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: customer.createdAt || new Date(),
+        updatedAt: customer.updatedAt || new Date(),
       } as Customer;
     } finally {
       setIsCreating(false);
