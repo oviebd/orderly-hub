@@ -12,6 +12,8 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { Progress } from '@/components/ui/progress';
+
 
 export default function Customers() {
     const navigate = useNavigate();
@@ -24,6 +26,12 @@ export default function Customers() {
     const [sortField, setSortField] = useState<'name' | 'lastOrder'>('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const [isImporting, setIsImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState(0);
+    const [importTotal, setImportTotal] = useState(0);
+    const [currentItem, setCurrentItem] = useState('');
+
 
     const customerStats = useMemo(() => {
         return customers.map(customer => {
@@ -126,28 +134,48 @@ export default function Customers() {
                 const ws = wb.Sheets[wsname];
                 const data = XLSX.utils.sheet_to_json(ws);
 
+                if (data.length === 0) {
+                    toast.error("The selected file is empty");
+                    return;
+                }
+
+                setIsImporting(true);
+                setImportTotal(data.length);
+                setImportProgress(0);
+
                 let successCount = 0;
                 let errorCount = 0;
 
-                for (const row of data as any[]) {
+
+                const loadingToast = toast.loading(`Importing 0/${data.length} customers...`);
+
+                for (let i = 0; i < data.length; i++) {
+                    const row = data[i] as any;
+                    const itemName = row.Name || `Item ${i + 1}`;
+                    setCurrentItem(itemName);
+                    setImportProgress(i + 1);
+
+                    toast.loading(`Processing ${itemName}...`, { id: loadingToast });
+
+
                     try {
                         // Basic validation
                         if (!row.Name || !row.Phone) {
                             console.warn("Skipping invalid row:", row);
+                            toast.error(`Invalid data for ${itemName}`, { duration: 2000 });
+                            errorCount++;
                             continue;
                         }
 
                         const createdAt = row['Created At'] ? new Date(row['Created At']) : undefined;
-                        // Use provided date, or if invalid/missing, undefined (hook uses default)
                         const validCreatedAt = createdAt && !isNaN(createdAt.getTime()) ? createdAt : undefined;
 
-                        // Try to get update date, fallback to Last Order date, else undefined
                         const updatedAtString = row['Updated At'] || row['Last Order'];
                         const updatedAt = updatedAtString ? new Date(updatedAtString) : undefined;
                         const validUpdatedAt = updatedAt && !isNaN(updatedAt.getTime()) ? updatedAt : undefined;
 
-
                         await createCustomer({
+                            id: row['Customer ID'] || row['ID'],
                             ownerId: row['Owner ID'],
                             name: row.Name,
                             phone: String(row.Phone),
@@ -158,19 +186,25 @@ export default function Customers() {
                             createdAt: validCreatedAt,
                             updatedAt: validUpdatedAt,
                         });
+
                         successCount++;
+                        toast.success(`Succeeded: ${itemName}`, { duration: 1000 });
                     } catch (error) {
                         console.error("Error importing row:", row, error);
                         errorCount++;
+                        toast.error(`Failed: ${itemName}`, { duration: 3000 });
                     }
+
+                    toast.loading(`Importing ${i + 1}/${data.length} customers...`, { id: loadingToast });
                 }
 
-                toast.success(`Import complete. Added/Updated: ${successCount}, Failed/Skipped: ${errorCount}`);
+                toast.success(`Import complete! Added/Updated: ${successCount}, Failed/Skipped: ${errorCount}`, { id: loadingToast, duration: 5000 });
 
             } catch (error) {
                 console.error("Error parsing file:", error);
                 toast.error("Failed to parse Excel file");
             } finally {
+                setIsImporting(false);
                 if (fileInputRef.current) {
                     fileInputRef.current.value = '';
                 }
@@ -190,6 +224,36 @@ export default function Customers() {
 
     return (
         <DashboardLayout businessName={profile?.businessName || 'My Business'} onLogout={handleLogout}>
+            {isImporting && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                    <div className="flex flex-col items-center gap-4 p-8 rounded-xl bg-card border shadow-2xl animate-in fade-in zoom-in duration-200 max-w-md w-full mx-4">
+                        <div className="relative">
+                            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-[10px] font-bold">{Math.round((importProgress / importTotal) * 100)}%</span>
+                            </div>
+                        </div>
+                        <div className="space-y-2 text-center w-full">
+                            <p className="text-xl font-bold tracking-tight">Importing Customers</p>
+                            <p className="text-sm text-muted-foreground">
+                                Processing {importProgress} of {importTotal}
+                            </p>
+                            <Progress value={(importProgress / importTotal) * 100} className="h-2 w-full" />
+                            <p className="text-xs text-muted-foreground truncate italic">
+                                {currentItem && `Adding: ${currentItem}`}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1 bg-secondary rounded-full">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                            </span>
+                            <p className="text-[10px] font-medium uppercase tracking-wider">Please do not close this window</p>
+                        </div>
+                    </div>
+                </div>
+            )/* overlay loader during import */}
+
             <div className="space-y-6">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>

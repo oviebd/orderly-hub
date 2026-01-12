@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { OrderCard } from '@/components/orders/OrderCard';
 import { StatusTabs } from '@/components/orders/StatusTabs';
@@ -6,7 +6,7 @@ import { AddOrderDialog } from '@/components/orders/AddOrderDialog';
 import { CustomerDialog } from '@/components/customers/CustomerDialog';
 import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
 import { Button } from '@/components/ui/button';
-import { Plus, Package, Loader2, Search, ArrowUpDown, ShoppingBag } from 'lucide-react';
+import { Plus, Package, Loader2, Search, ArrowUpDown, ShoppingBag, Download, Upload } from 'lucide-react';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
@@ -16,6 +16,10 @@ import { useFirebaseExperience } from '@/hooks/useFirebaseExperience';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import * as XLSX from 'xlsx';
+import { toast as sonnerToast } from 'sonner';
+import { Progress } from '@/components/ui/progress';
+
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -34,6 +38,11 @@ export default function Dashboard() {
   const [experienceOpen, setExperienceOpen] = useState(false);
   const [orderToDeliver, setOrderToDeliver] = useState<Order | null>(null);
   const [targetFeedbackStatus, setTargetFeedbackStatus] = useState<OrderStatus>('delivered');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importTotal, setImportTotal] = useState(0);
+  const [currentItem, setCurrentItem] = useState('');
+
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -41,6 +50,137 @@ export default function Dashboard() {
       navigate('/login');
     }
   }, [user, authLoading, navigate]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = () => {
+    const dataToExport = orders.map(o => {
+      const customer = customers.find(c => c.id === o.customerId);
+      return {
+        'Order ID': o.id,
+        'Owner ID': o.ownerId,
+        'Business ID': o.businessId,
+        'Customer ID': o.customerId,
+        'Customer Name': customer?.name || '',
+        'Customer Phone': customer?.phone || '',
+        'Product ID': o.productId || '',
+        'Product Name': o.productName,
+        'Price': o.price,
+        'Status': o.status,
+        'Source': o.source,
+        'Order Date': o.orderDate.toISOString(),
+        'Delivery Date': o.deliveryDate.toISOString(),
+        'Notes': o.notes,
+        'Address': o.address || '',
+        'Has Order Time': o.hasOrderTime,
+        'Has Delivery Time': o.hasDeliveryTime,
+        'Created At': o.createdAt.toISOString(),
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Orders");
+    XLSX.writeFile(wb, "Orders.xlsx");
+    sonnerToast.success("Orders exported successfully");
+  };
+
+  const handleImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        if (data.length === 0) {
+          sonnerToast.error("The selected file is empty");
+          return;
+        }
+
+        setIsImporting(true);
+        setImportTotal(data.length);
+        setImportProgress(0);
+
+        let successCount = 0;
+        let errorCount = 0;
+
+
+        const loadingToast = sonnerToast.loading(`Importing 0/${data.length} orders...`);
+
+        for (let i = 0; i < data.length; i++) {
+          const row = data[i] as any;
+          const itemName = row['Product Name'] || row['Order ID'] || `Order ${i + 1}`;
+          setCurrentItem(itemName);
+          setImportProgress(i + 1);
+
+          sonnerToast.loading(`Processing ${itemName}...`, { id: loadingToast });
+
+
+          try {
+            if (!row['Customer ID'] || !row['Product Name'] || row['Price'] === undefined) {
+              console.warn("Skipping invalid row:", row);
+              sonnerToast.error(`Invalid data for ${itemName}`, { duration: 2000 });
+              errorCount++;
+              continue;
+            }
+
+            await createOrder({
+              id: row['Order ID'] || row['ID'],
+              ownerId: row['Owner ID'] || user!.uid,
+              businessId: row['Business ID'] || profile!.businessId!,
+              customerId: row['Customer ID'],
+              productId: row['Product ID'] || undefined,
+              productName: String(row['Product Name']),
+              price: Number(row['Price']),
+              status: (row['Status'] as OrderStatus) || 'pending',
+              source: (row['Source'] as OrderSource) || 'phone',
+              orderDate: row['Order Date'] ? new Date(row['Order Date']) : new Date(),
+              deliveryDate: row['Delivery Date'] ? new Date(row['Delivery Date']) : new Date(),
+              notes: row['Notes'] || '',
+              address: row['Address'] || '',
+              hasOrderTime: !!row['Has Order Time'],
+              hasDeliveryTime: !!row['Has Delivery Time'],
+              createdAt: row['Created At'] ? new Date(row['Created At']) : undefined,
+              updatedAt: row['Updated At'] ? new Date(row['Updated At']) : undefined,
+            });
+
+            successCount++;
+            sonnerToast.success(`Succeeded: ${itemName}`, { duration: 1000 });
+          } catch (error) {
+            console.error("Error importing order:", row, error);
+            errorCount++;
+            sonnerToast.error(`Failed: ${itemName}`, { duration: 3000 });
+          }
+
+          sonnerToast.loading(`Importing ${i + 1}/${data.length} orders...`, { id: loadingToast });
+        }
+
+        sonnerToast.success(`Import complete! Added/Updated: ${successCount}, Failed/Skipped: ${errorCount}`, { id: loadingToast, duration: 5000 });
+
+      } catch (error) {
+        console.error("Error parsing file:", error);
+        sonnerToast.error("Failed to parse Excel file");
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
 
   const getFilteredOrders = () => {
     const today = new Date();
@@ -255,6 +395,36 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout businessName={profile?.businessName || 'My Business'} onLogout={handleLogout}>
+      {isImporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 p-8 rounded-xl bg-card border shadow-2xl animate-in fade-in zoom-in duration-200 max-w-md w-full mx-4">
+            <div className="relative">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[10px] font-bold">{Math.round((importProgress / importTotal) * 100)}%</span>
+              </div>
+            </div>
+            <div className="space-y-2 text-center w-full">
+              <p className="text-xl font-bold tracking-tight">Importing Orders</p>
+              <p className="text-sm text-muted-foreground">
+                Processing {importProgress} of {importTotal}
+              </p>
+              <Progress value={(importProgress / importTotal) * 100} className="h-2 w-full" />
+              <p className="text-xs text-muted-foreground truncate italic">
+                {currentItem && `Adding: ${currentItem}`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1 bg-secondary rounded-full">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              </span>
+              <p className="text-[10px] font-medium uppercase tracking-wider">Please do not close this window</p>
+            </div>
+          </div>
+        </div>
+      )/* overlay loader during import */}
+
       <div className="space-y-6">
         {/* Error State */}
         {(ordersError || customersError) && (
@@ -288,15 +458,31 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
             <p className="text-muted-foreground">Manage your orders and track deliveries</p>
           </div>
-          <Button
-            onClick={() => setAddOrderOpen(true)}
-            size="lg"
-            className="gap-2"
-            disabled={isCreating || profile?.canCreateOrders === false || profile?.status === 'disabled'}
-          >
-            {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
-            New Order
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".xlsx, .xls"
+              className="hidden"
+            />
+            <Button variant="outline" onClick={handleImportClick} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Import
+            </Button>
+            <Button variant="outline" onClick={handleExport} className="gap-2">
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            <Button
+              onClick={() => setAddOrderOpen(true)}
+              className="gap-2"
+              disabled={isCreating || profile?.canCreateOrders === false || profile?.status === 'disabled'}
+            >
+              {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
+              New Order
+            </Button>
+          </div>
         </div>
 
         {/* Filters and Search */}

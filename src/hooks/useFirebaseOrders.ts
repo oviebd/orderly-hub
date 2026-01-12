@@ -10,7 +10,8 @@ import {
   doc,
   getDoc,
   serverTimestamp,
-  deleteDoc
+  deleteDoc,
+  setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getBusinessRootPath } from '@/lib/utils';
@@ -97,7 +98,7 @@ export function useFirebaseOrders() {
     return () => unsubscribe();
   }, [user, profile]);
 
-  const createOrder = async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const createOrder = async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> & { id?: string; createdAt?: Date; updatedAt?: Date }) => {
     if (!user || !profile) throw new Error('Not authenticated');
     const ordersRef = getCollectionRef();
     if (!ordersRef) throw new Error('Could not determine storage path');
@@ -105,16 +106,18 @@ export function useFirebaseOrders() {
     setIsCreating(true);
 
     try {
-      await addDoc(ordersRef, {
-        ownerId: user.uid,
-        businessId: profile.businessId || profile.email, // Fallback to email if businessId missing (redundancy), or better yet, error. But wait, we added businessId to profile recently.
+      const orderDocRef = order.id ? doc(ordersRef, order.id) : doc(ordersRef);
+      const isUpdate = order.id ? (await getDoc(orderDocRef)).exists() : false;
+
+      const data: any = {
+        ownerId: order.ownerId || user.uid,
+        businessId: order.businessId || profile.businessId || profile.email,
         customerId: order.customerId || null,
-        // phone: order.phone, // Removed phone as per request
         productId: order.productId || null,
         productName: order.productName,
         address: order.address || '',
         productDetails: order.productDetails || '',
-        price: order.price,
+        price: Number(order.price),
         orderDate: order.orderDate,
         deliveryDate: order.deliveryDate,
         hasOrderTime: order.hasOrderTime,
@@ -122,9 +125,16 @@ export function useFirebaseOrders() {
         status: order.status,
         source: order.source,
         notes: order.notes,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        updatedAt: order.updatedAt || serverTimestamp(),
+      };
+
+      if (!isUpdate) {
+        data.createdAt = order.createdAt || serverTimestamp();
+      } else if (order.createdAt) {
+        data.createdAt = order.createdAt;
+      }
+
+      await setDoc(orderDocRef, data, { merge: true });
     } finally {
       setIsCreating(false);
     }

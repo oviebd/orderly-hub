@@ -9,7 +9,10 @@ import {
     serverTimestamp,
     getDocs,
     doc,
-    deleteDoc
+    getDoc,
+    deleteDoc,
+    updateDoc,
+    setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getBusinessRootPath } from '@/lib/utils';
@@ -73,32 +76,100 @@ export function useFirebaseProducts() {
         return () => unsubscribe();
     }, [user, profile]);
 
-    const createProduct = async (productData: { name: string; price: number; details: string; code?: string }) => {
+    const createProduct = async (productData: {
+        name: string;
+        price: number;
+        details: string;
+        code?: string;
+        ownerId?: string;
+        productId?: string;
+        createdAt?: Date;
+    }) => {
         if (!user || !profile) throw new Error('Not authenticated');
         const productsRef = getCollectionRef();
         if (!productsRef) throw new Error('Could not determine storage path');
 
-        // Check for unique code if provided
+        // Determine if we use a specific ID or generate one
+        const productDocRef = productData.productId
+            ? doc(productsRef, productData.productId)
+            : doc(productsRef);
+
+        const actualProductId = productDocRef.id;
+
+        // Check for unique code if provided (exclude current product if updating)
         if (productData.code) {
-            // const q = query(productsRef, where('code', '==', productData.code), where('businessId', '==', user.uid)); 
-            const formattedQuery = query(productsRef, where('code', '==', productData.code), where('businessId', '==', user.uid));
+            const formattedQuery = query(productsRef,
+                where('code', '==', productData.code),
+                where('businessId', '==', user.uid)
+            );
             const snapshot = await getDocs(formattedQuery);
-            // Prompt: "product Code and productId (it will be unique and root product documentId)"
-            // I will treat productId as the doc ID (auto-generated) and product Code as a field.
-            if (!snapshot.empty) {
-                // Checking if any other product has this code (simplified scoped to business is safer for multi-tenant, prompt says "unique")
-                // Let's assume unique per business for now to avoid collision.
+            const duplicates = snapshot.docs.filter(d => d.id !== actualProductId);
+            if (duplicates.length > 0) {
+                throw new Error(`Product with code "${productData.code}" already exists.`);
             }
         }
 
-        await addDoc(productsRef, {
+        // Check for existing doc to handle createdAt default
+        const docSnap = await getDoc(productDocRef);
+        const data: any = {
             businessId: user.uid,
-            ownerId: user.uid, // Start adding ownerId
-            ...productData,
-            productName: productData.name, // Add productName as alias per request
-            createdAt: serverTimestamp(),
+            ownerId: productData.ownerId || user.uid,
+            productId: actualProductId,
+            productName: productData.name,
+            name: productData.name,
+            price: Number(productData.price),
+            details: productData.details || '',
+            code: productData.code || null,
             updatedAt: serverTimestamp(),
-        });
+        };
+
+        if (!docSnap.exists()) {
+            // New product: default createdAt to current time if missing
+            data.createdAt = productData.createdAt || serverTimestamp();
+        } else if (productData.createdAt) {
+            // Updating existing product: only update createdAt if provided
+            data.createdAt = productData.createdAt;
+        }
+
+        await setDoc(productDocRef, data, { merge: true });
+    };
+
+    const updateProduct = async (productId: string, updates: Partial<Product>) => {
+        if (!user || !profile) throw new Error('Not authenticated');
+        const productRef = getDocRef(productId);
+        if (!productRef) throw new Error('Could not determine storage path');
+
+        // If code is being updated, check uniqueness (excluding current product)
+        if (updates.code) {
+            const productsRef = getCollectionRef();
+            if (productsRef) {
+                const formattedQuery = query(productsRef,
+                    where('code', '==', updates.code),
+                    where('businessId', '==', user.uid)
+                );
+                const snapshot = await getDocs(formattedQuery);
+                // Check if found doc is NOT the one we are updating
+                const duplicateParams = snapshot.docs.filter(d => d.id !== productId);
+                if (duplicateParams.length > 0) {
+                    throw new Error(`Product with code "${updates.code}" already exists.`);
+                }
+            }
+        }
+
+        const firestoreUpdates = {
+            ...updates,
+            updatedAt: serverTimestamp(),
+        };
+
+        // Update productName if name is updated, for consistency
+        if (updates.name) {
+            (firestoreUpdates as any).productName = updates.name;
+        }
+
+        // Clean undefined
+        Object.keys(firestoreUpdates).forEach(key => (firestoreUpdates as any)[key] === undefined && delete (firestoreUpdates as any)[key]);
+
+        await updateDoc(productRef, firestoreUpdates);
     };
 
     const getDocRef = (id: string) => {
@@ -124,6 +195,7 @@ export function useFirebaseProducts() {
         isLoading,
         error,
         createProduct,
+        updateProduct,
         deleteProduct
     };
 }

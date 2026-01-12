@@ -89,12 +89,8 @@ export function useFirebaseCustomers() {
     return () => unsubscribe();
   }, [user, profile]);
 
-  const createCustomer = async (customer: Omit<Customer, 'id' | 'createdAt' | 'ownerId'> & { ownerId?: string; createdAt?: Date; updatedAt?: Date }) => {
+  const createCustomer = async (customer: Omit<Customer, 'id' | 'createdAt' | 'ownerId'> & { id?: string; ownerId?: string; createdAt?: Date; updatedAt?: Date }) => {
     if (!user || !profile) throw new Error('Not authenticated');
-
-    // Normalize phone: keep only digits
-    const normalizedPhone = customer.phone.replace(/\D/g, '');
-    if (!normalizedPhone) throw new Error('Invalid phone number');
 
     const collectionRef = getCollectionRef();
     if (!collectionRef) throw new Error('Could not determine storage path');
@@ -102,63 +98,52 @@ export function useFirebaseCustomers() {
     setIsCreating(true);
 
     try {
-      // Check for existing customer with same phone manually since ID is now UUID
-      // This is a bit more expensive than direct ID lookup but necessary for UUID approach
-      const q = query(collectionRef, where('phone', '==', customer.phone)); // Or use normalized if searching normalized
-      const querySnapshot = await getDocs(q);
+      let customerRef;
+      let isUpdate = false;
 
-      if (!querySnapshot.empty) {
-        // Customer already exists, return existing
-        const docSnap = querySnapshot.docs[0];
-        const existingData = docSnap.data();
-        return {
-          id: docSnap.id,
-          ownerId: existingData.ownerId,
-          phone: existingData.phone,
-          name: existingData.name,
-          email: existingData.email || '',
-          address: existingData.address || '',
-          rating: existingData.rating || 0,
-          comment: existingData.comment || '',
-          createdAt: existingData.createdAt?.toDate() || new Date(),
-          updatedAt: existingData.updatedAt?.toDate() || undefined,
-        } as Customer;
+      if (customer.id) {
+        customerRef = doc(collectionRef, customer.id);
+        const docSnap = await getDoc(customerRef);
+        isUpdate = docSnap.exists();
+      } else {
+        // Try to find by phone if no ID provided
+        const q = query(collectionRef, where('phone', '==', customer.phone));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          customerRef = querySnapshot.docs[0].ref;
+          isUpdate = true;
+        } else {
+          // New customer, generate ID
+          const newId = crypto.randomUUID();
+          customerRef = doc(collectionRef, newId);
+        }
       }
 
-      // Generate new UUID-like ID
-      const newId = crypto.randomUUID();
-      const customerRef = getDocRef(newId);
-      if (!customerRef) throw new Error('Could not determine storage path');
-
       const ownerIdToUse = customer.ownerId || user.uid;
-      const createdAtToUse = customer.createdAt ? customer.createdAt : serverTimestamp();
-      const updatedAtToUse = customer.updatedAt ? customer.updatedAt : serverTimestamp();
-
-      const newCustomerData = {
-        ownerId: ownerIdToUse,
-        phone: customer.phone, // Store original format for display
-        name: customer.name,
-        email: customer.email || '',
-        address: customer.address || '',
-        rating: customer.rating,
-        comment: customer.comment,
-        createdAt: createdAtToUse,
-        updatedAt: updatedAtToUse,
-      };
-
-      await setDoc(customerRef, newCustomerData);
-
-      return {
-        id: newId,
+      const data: any = {
         ownerId: ownerIdToUse,
         phone: customer.phone,
         name: customer.name,
         email: customer.email || '',
         address: customer.address || '',
-        rating: customer.rating,
-        comment: customer.comment,
-        createdAt: customer.createdAt || new Date(),
-        updatedAt: customer.updatedAt || new Date(),
+        rating: customer.rating || 0,
+        comment: customer.comment || '',
+        updatedAt: customer.updatedAt || serverTimestamp(),
+      };
+
+      if (!isUpdate) {
+        data.createdAt = customer.createdAt || serverTimestamp();
+      } else if (customer.createdAt) {
+        data.createdAt = customer.createdAt;
+      }
+
+      await setDoc(customerRef, data, { merge: true });
+
+      return {
+        id: customerRef.id,
+        ...data,
+        createdAt: data.createdAt instanceof Date ? data.createdAt : new Date(),
+        updatedAt: data.updatedAt instanceof Date ? data.updatedAt : new Date(),
       } as Customer;
     } finally {
       setIsCreating(false);

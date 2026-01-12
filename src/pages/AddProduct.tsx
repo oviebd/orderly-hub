@@ -21,6 +21,7 @@ export default function AddProduct() {
     const [name, setName] = useState('');
     const [price, setPrice] = useState('');
     const [details, setDetails] = useState('');
+    const [code, setCode] = useState('');
 
     const handleLogout = async () => {
         await signOut();
@@ -54,7 +55,8 @@ export default function AddProduct() {
             await createProduct({
                 name,
                 price: Number(price),
-                details
+                details,
+                code: code.trim() || undefined
             });
 
             toast({
@@ -110,6 +112,17 @@ export default function AddProduct() {
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="e.g., Chocolate Cake"
+                                    disabled={isSaving}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="code">Product Code (Optional)</Label>
+                                <Input
+                                    id="code"
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value)}
+                                    placeholder="e.g., P-100"
                                     disabled={isSaving}
                                 />
                             </div>
