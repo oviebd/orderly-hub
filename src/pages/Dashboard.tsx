@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { OrderCard } from '@/components/orders/OrderCard';
 import { StatusTabs } from '@/components/orders/StatusTabs';
-import { AddOrderDialog } from '@/components/orders/AddOrderDialog';
+import { AddOrderDialog, AddOrderDialogProps } from '@/components/orders/AddOrderDialog';
 import { CustomerDialog } from '@/components/customers/CustomerDialog';
 import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,7 @@ export default function Dashboard() {
   const handleExport = () => {
     const dataToExport = orders.map(o => {
       const customer = customers.find(c => c.id === o.customerId);
+      const productSummary = o.products.map(p => `${p.name} (x${p.quantity})`).join(', ');
       return {
         'Order ID': o.id,
         'Owner ID': o.ownerId,
@@ -63,9 +64,9 @@ export default function Dashboard() {
         'Customer ID': o.customerId,
         'Customer Name': customer?.name || '',
         'Customer Phone': customer?.phone || '',
-        'Product ID': o.productId || '',
-        'Product Name': o.productName,
-        'Price': o.price,
+        'Products': productSummary,
+        'Delivery Charge': o.deliveryCharge,
+        'Total Amount': o.totalAmount,
         'Status': o.status,
         'Source': o.source,
         'Order Date': o.orderDate.toISOString(),
@@ -136,14 +137,23 @@ export default function Dashboard() {
               continue;
             }
 
+            const price = Number(row['Price'] || 0);
+            const deliveryCharge = Number(row['Delivery Charge'] || 0);
+            const quantity = Number(row['Quantity'] || 1);
+
             await createOrder({
               id: row['Order ID'] || row['ID'],
               ownerId: row['Owner ID'] || user!.uid,
               businessId: row['Business ID'] || profile!.businessId!,
               customerId: row['Customer ID'],
-              productId: row['Product ID'] || undefined,
-              productName: String(row['Product Name']),
-              price: Number(row['Price']),
+              products: row['Products'] ? [] : [{ // Fallback if old format or manual Products column missing
+                id: row['Product ID'] || Math.random().toString(36).substr(2, 9),
+                name: String(row['Product Name']),
+                price: price,
+                quantity: quantity,
+              }],
+              deliveryCharge: deliveryCharge,
+              totalAmount: price * quantity + deliveryCharge,
               status: (row['Status'] as OrderStatus) || 'pending',
               source: (row['Source'] as OrderSource) || 'phone',
               orderDate: row['Order Date'] ? new Date(row['Order Date']) : new Date(),
@@ -212,7 +222,11 @@ export default function Dashboard() {
         return (
           customer?.name.toLowerCase().includes(q) ||
           customer?.phone.includes(q) ||
-          order.productDetails.toLowerCase().includes(q)
+          order.products.some(p =>
+            p.name.toLowerCase().includes(q) ||
+            p.code?.toLowerCase().includes(q) ||
+            p.description?.toLowerCase().includes(q)
+          )
         );
       });
     }
@@ -332,30 +346,16 @@ export default function Dashboard() {
     }
   };
 
-  const handleAddOrder = async (orderData: {
-    customerId: string;
-    productId?: string;
-    productName: string;
-    productDetails?: string;
-    price: number;
-    orderDate: Date;
-    deliveryDate: Date;
-    hasOrderTime: boolean;
-    hasDeliveryTime: boolean;
-    source: OrderSource;
-    notes: string;
-    address?: string;
-  }) => {
+  const handleAddOrder = async (orderData: Parameters<AddOrderDialogProps['onSubmit']>[0]) => {
     try {
       // Customer creation is handled inside AddOrderDialog
       await createOrder({
         ownerId: user!.uid,
         businessId: profile!.businessId!,
         customerId: orderData.customerId,
-        productId: orderData.productId,
-        productName: orderData.productName,
-        productDetails: orderData.productDetails || '',
-        price: orderData.price,
+        products: orderData.products,
+        deliveryCharge: orderData.deliveryCharge,
+        totalAmount: orderData.totalAmount,
         orderDate: orderData.orderDate,
         deliveryDate: orderData.deliveryDate,
         hasOrderTime: orderData.hasOrderTime,

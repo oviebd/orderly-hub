@@ -14,17 +14,24 @@ export interface Customer {
   updatedAt?: Date;
 }
 
+export interface OrderProduct {
+  id: string;
+  name: string;
+  code?: string;
+  quantity: number;
+  price: number;
+  description?: string;
+}
+
 export interface Order {
   id: string;
   ownerId: string;
   businessId: string; // ID of the business account
   customerId: string;
-  // phone removed as per request, linked via customerId
-  productId?: string;
-  productName: string;
-  productDetails?: string;
+  products: OrderProduct[];
+  deliveryCharge: number;
+  totalAmount: number;
   address?: string;
-  price: number;
   orderDate: Date;
   deliveryDate: Date;
   hasOrderTime: boolean;

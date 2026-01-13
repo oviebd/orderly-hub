@@ -83,18 +83,12 @@ export function OrderCard({ order, onStatusChange, onViewCustomer, customerName 
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold truncate">{customerName || order.phone}</h3>
+              <h3 className="font-semibold truncate">{customerName || 'Unknown Customer'}</h3>
               <Badge variant={order.source}>{sourceLabels[order.source]}</Badge>
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onViewCustomer(order.customerId);
-              }}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              {order.phone}
-            </button>
+            <div className="text-xs text-muted-foreground">
+              {order.products.length} {order.products.length === 1 ? 'item' : 'items'}
+            </div>
           </div>
 
           <DropdownMenu>
@@ -130,7 +124,22 @@ export function OrderCard({ order, onStatusChange, onViewCustomer, customerName 
         </div>
 
         {/* Product Details */}
-        <p className="mt-3 text-sm text-foreground">{order.productDetails}</p>
+        <div className="mt-3 space-y-1">
+          {order.products.map((p, i) => (
+            <div key={i} className="text-sm flex justify-between gap-2">
+              <span className="text-foreground truncate">
+                {p.name} <span className="text-muted-foreground text-xs">x{p.quantity}</span>
+              </span>
+              <span className="text-muted-foreground text-xs shrink-0">${(p.price * p.quantity).toFixed(2)}</span>
+            </div>
+          ))}
+          {order.deliveryCharge > 0 && (
+            <div className="text-xs text-muted-foreground flex justify-between">
+              <span>Delivery Charge</span>
+              <span>${order.deliveryCharge.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
 
         {/* Notes */}
         {order.notes && (
@@ -154,7 +163,7 @@ export function OrderCard({ order, onStatusChange, onViewCustomer, customerName 
           </div>
 
           <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-            <span className="text-lg font-semibold">${order.price.toFixed(2)}</span>
+            <span className="text-lg font-semibold">${order.totalAmount.toFixed(2)}</span>
             <Badge variant={order.status}>{statusLabels[order.status]}</Badge>
           </div>
         </div>

@@ -19,21 +19,27 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
-import { CalendarIcon, Star, User, Search, MapPin, Package } from 'lucide-react';
+import { CalendarIcon, Star, User, Search, MapPin, Package, Plus, Minus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OrderSource, Customer, Product } from '@/types';
 import { useFirebaseCustomers } from '@/hooks/useFirebaseCustomers';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 
-interface AddOrderDialogProps {
+export interface AddOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (order: {
-    customerId: string; // Add customerId
-    productId?: string;
-    productName: string;
-    productDetails?: string;
-    price: number;
+    customerId: string;
+    products: {
+      id: string;
+      name: string;
+      code?: string;
+      quantity: number;
+      price: number;
+      description?: string;
+    }[];
+    deliveryCharge: number;
+    totalAmount: number;
     orderDate: Date;
     deliveryDate: Date;
     hasOrderTime: boolean;
@@ -50,9 +56,32 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers: initia
   const [phoneSearch, setPhoneSearch] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [address, setAddress] = useState('');
-  const [productSearch, setProductSearch] = useState('');
-  const [productDetails, setProductDetails] = useState('');
-  const [price, setPrice] = useState('');
+  // Selected entities
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+  // Multiple Products state
+  const [orderItems, setOrderItems] = useState<{
+    id: string;
+    productId?: string;
+    name: string;
+    code?: string;
+    price: number;
+    quantity: number;
+    description?: string;
+    search: string;
+    suggestions: Product[];
+    showSuggestions: boolean;
+  }[]>([{
+    id: '1',
+    name: '',
+    price: 0,
+    quantity: 1,
+    search: '',
+    suggestions: [],
+    showSuggestions: false
+  }]);
+
+  const [deliveryCharge, setDeliveryCharge] = useState('0');
   const [orderDate, setOrderDate] = useState<Date>(new Date());
   const [orderTime, setOrderTime] = useState('');
   const [deliveryDate, setDeliveryDate] = useState<Date>();
@@ -63,12 +92,6 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers: initia
   // Local state for search suggestions
   const [phoneSuggestions, setPhoneSuggestions] = useState<Customer[]>([]);
   const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
-  const [productSuggestions, setProductSuggestions] = useState<Product[]>([]);
-  const [showProductSuggestions, setShowProductSuggestions] = useState(false);
-
-  // Selected entities
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const { products } = useFirebaseProducts(); // Fetch products for search
   const { createCustomer, updateCustomer } = useFirebaseCustomers(); // Need actions to create/update customer
@@ -103,38 +126,88 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers: initia
     setShowPhoneSuggestions(false);
   };
 
-  const handleProductSearch = (value: string) => {
-    setProductSearch(value);
-    const searchLower = value.toLowerCase();
+  const handleProductSearch = (index: number, value: string) => {
+    const newItems = [...orderItems];
+    newItems[index].search = value;
+    newItems[index].name = value; // Keep name in sync with search if not selected
 
+    const searchLower = value.toLowerCase();
     if (searchLower.length >= 2) {
       const matches = products.filter(p =>
         p.name.toLowerCase().includes(searchLower) ||
         (p.code && p.code.toLowerCase().includes(searchLower))
       );
-      setProductSuggestions(matches);
-      setShowProductSuggestions(true);
+      newItems[index].suggestions = matches;
+      newItems[index].showSuggestions = true;
     } else {
-      setProductSuggestions([]);
-      setShowProductSuggestions(false);
+      newItems[index].suggestions = [];
+      newItems[index].showSuggestions = false;
     }
-
-    if (selectedProduct) {
-      setSelectedProduct(null);
-    }
+    setOrderItems(newItems);
   };
 
-  const selectProduct = (product: Product) => {
-    setSelectedProduct(product);
-    setProductSearch(product.name);
-    setProductDetails(product.name);
-    setPrice(product.price.toString());
-    setShowProductSuggestions(false);
+  const selectProduct = (index: number, product: Product) => {
+    const newItems = [...orderItems];
+    newItems[index].productId = product.id;
+    newItems[index].name = product.name;
+    newItems[index].code = product.code;
+    newItems[index].price = product.price;
+    newItems[index].search = product.name;
+    newItems[index].showSuggestions = false;
+    setOrderItems(newItems);
   };
+
+  const updateQuantity = (index: number, delta: number) => {
+    const newItems = [...orderItems];
+    newItems[index].quantity = Math.max(1, newItems[index].quantity + delta);
+    setOrderItems(newItems);
+  };
+
+  const handleQuantityManual = (index: number, value: string) => {
+    const newItems = [...orderItems];
+    const qty = parseInt(value) || 0;
+    newItems[index].quantity = qty;
+    setOrderItems(newItems);
+  };
+
+  const handlePriceChange = (index: number, value: string) => {
+    const newItems = [...orderItems];
+    newItems[index].price = parseFloat(value) || 0;
+    setOrderItems(newItems);
+  };
+
+  const handleDescriptionChange = (index: number, value: string) => {
+    const newItems = [...orderItems];
+    newItems[index].description = value;
+    setOrderItems(newItems);
+  };
+
+  const addProductRow = () => {
+    setOrderItems([...orderItems, {
+      id: Math.random().toString(36).substr(2, 9),
+      name: '',
+      price: 0,
+      quantity: 1,
+      search: '',
+      suggestions: [],
+      showSuggestions: false
+    }]);
+  };
+
+  const removeProductRow = (index: number) => {
+    if (orderItems.length === 1) return;
+    setOrderItems(orderItems.filter((_, i) => i !== index));
+  };
+
+  const calculateSubtotal = () => {
+    return orderItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  };
+
+  const totalAmount = calculateSubtotal() + parseFloat(deliveryCharge || '0');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phoneSearch || !productSearch || !price || !deliveryDate) return;
+    if (!phoneSearch || orderItems.some(i => !i.name || i.price <= 0) || !deliveryDate) return;
 
     let finalCustomerId = selectedCustomer?.id;
 
@@ -173,10 +246,19 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers: initia
 
     onSubmit({
       customerId: finalCustomerId,
-      productId: selectedProduct?.id,
-      productName: productSearch, // Use the search input as the name
-      productDetails,
-      price: parseFloat(price),
+      products: orderItems.map(item => {
+        const product: any = {
+          id: item.productId || item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+        };
+        if (item.code) product.code = item.code;
+        if (item.description) product.description = item.description;
+        return product;
+      }),
+      deliveryCharge: parseFloat(deliveryCharge),
+      totalAmount,
       orderDate: finalOrderDate,
       deliveryDate: finalDeliveryDate,
       hasOrderTime: !!orderTime,
@@ -190,14 +272,20 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers: initia
     setPhoneSearch('');
     setCustomerName('');
     setAddress('');
-    setProductSearch('');
-    setProductDetails('');
-    setPrice('');
+    setOrderItems([{
+      id: '1',
+      name: '',
+      price: 0,
+      quantity: 1,
+      search: '',
+      suggestions: [],
+      showSuggestions: false
+    }]);
+    setDeliveryCharge('0');
     setDeliveryDate(undefined);
     setSource('whatsapp');
     setNotes('');
     setSelectedCustomer(null);
-    setSelectedProduct(null);
     onOpenChange(false);
   };
 
@@ -273,82 +361,168 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers: initia
             </div>
           </div>
 
-          {/* Product Section */}
+          {/* Order Source Section */}
           <div className="space-y-4 rounded-lg border p-4 bg-muted/20">
             <h3 className="font-medium flex items-center gap-2">
-              <Package className="h-4 w-4" /> Product Details
+              <Package className="h-4 w-4" /> Order Source
             </h3>
-
-            <div className="space-y-2 relative">
-              <Label htmlFor="productSearch">Product Name *</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="productSearch"
-                  placeholder="Search by name or code..."
-                  value={productSearch}
-                  onChange={(e) => handleProductSearch(e.target.value)}
-                  className="pl-9"
-                  autoComplete="off"
-                />
-              </div>
-              {/* Product Suggestions */}
-              {showProductSuggestions && productSuggestions.length > 0 && (
-                <div className="absolute z-10 w-full bg-popover text-popover-foreground border rounded-md shadow-md mt-1 max-h-40 overflow-y-auto">
-                  {productSuggestions.map(product => (
-                    <div
-                      key={product.id}
-                      className="px-3 py-2 cursor-pointer hover:bg-muted text-sm flex justify-between items-center"
-                      onClick={() => selectProduct(product)}
-                    >
-                      <span>{product.name}</span>
-                      <span className="text-muted-foreground text-xs">{product.price.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             <div className="space-y-2">
-              <Label htmlFor="productDetails">Details (Optional)</Label>
-              <Textarea
-                id="productDetails"
-                placeholder="Product description... (Optional)"
-                value={productDetails}
-                onChange={(e) => setProductDetails(e.target.value)}
-                className="min-h-[60px] resize-none"
-              />
+              <Label>Source *</Label>
+              <Select value={source} onValueChange={(v) => setSource(v as OrderSource)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="messenger">Messenger</SelectItem>
+                  <SelectItem value="phone">Phone</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Product Section */}
+          <div className="space-y-4 rounded-lg border p-4 bg-muted/20">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium flex items-center gap-2">
+                <Package className="h-4 w-4" /> Products
+              </h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addProductRow}
+                className="h-8 gap-1"
+              >
+                <Plus className="h-3 w-3" /> Add Product
+              </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="price">Price *</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+            <div className="space-y-6">
+              {orderItems.map((item, index) => (
+                <div key={item.id} className="space-y-3 p-3 rounded-md border bg-background/50 relative group">
+                  {orderItems.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute -right-2 -top-2 h-6 w-6 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => removeProductRow(index)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2 relative">
+                      <Label>Product Name *</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search or enter name..."
+                          value={item.search}
+                          onChange={(e) => handleProductSearch(index, e.target.value)}
+                          className="pl-9"
+                          autoComplete="off"
+                        />
+                      </div>
+                      {/* Product Suggestions */}
+                      {item.showSuggestions && item.suggestions.length > 0 && (
+                        <div className="absolute z-20 w-full bg-popover text-popover-foreground border rounded-md shadow-md mt-1 max-h-40 overflow-y-auto">
+                          {item.suggestions.map(product => (
+                            <div
+                              key={product.id}
+                              className="px-3 py-2 cursor-pointer hover:bg-muted text-sm flex justify-between items-center"
+                              onClick={() => selectProduct(index, product)}
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-medium">{product.name}</span>
+                                {product.code && <span className="text-xs text-muted-foreground">{product.code}</span>}
+                              </div>
+                              <span className="text-muted-foreground text-xs">${product.price.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
+                        <Label>Price *</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.price || ''}
+                            onChange={(e) => handlePriceChange(index, e.target.value)}
+                            className="pl-6"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Quantity</Label>
+                        <div className="flex items-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 rounded-r-none border-r-0"
+                            onClick={() => updateQuantity(index, -1)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => handleQuantityManual(index, e.target.value)}
+                            className="h-10 rounded-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 rounded-l-none border-l-0"
+                            onClick={() => updateQuantity(index, 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Details (Optional)</Label>
+                    <Input
+                      placeholder="Color, size, etc."
+                      value={item.description || ''}
+                      onChange={(e) => handleDescriptionChange(index, e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t space-y-3">
+              <div className="flex justify-between items-center px-2">
+                <Label htmlFor="deliveryCharge">Delivery Charge</Label>
+                <div className="relative w-32">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                   <Input
-                    id="price"
+                    id="deliveryCharge"
                     type="number"
                     step="0.01"
-                    placeholder="0.00"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    className="pl-7"
+                    value={deliveryCharge}
+                    onChange={(e) => setDeliveryCharge(e.target.value)}
+                    className="pl-6 text-right"
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label>Source</Label>
-                <Select value={source} onValueChange={(v) => setSource(v as OrderSource)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                    <SelectItem value="messenger">Messenger</SelectItem>
-                    <SelectItem value="phone">Phone</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="flex justify-between items-center px-2 py-2 bg-primary/5 rounded-md">
+                <span className="font-semibold text-lg">Total Amount</span>
+                <span className="font-bold text-xl text-primary">${totalAmount.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -443,7 +617,7 @@ export function AddOrderDialog({ open, onOpenChange, onSubmit, customers: initia
             <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" className="flex-1" disabled={!phoneSearch || !productSearch || !price || !deliveryDate}>
+            <Button type="submit" className="flex-1" disabled={!phoneSearch || orderItems.some(i => !i.name || i.price <= 0) || !deliveryDate}>
               Create Order
             </Button>
           </div>

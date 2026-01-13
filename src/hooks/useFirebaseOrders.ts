@@ -68,12 +68,10 @@ export function useFirebaseOrders() {
             ownerId: data.ownerId,
             businessId: data.businessId,
             customerId: data.customerId || '',
-            // phone linked via customerId now
-            productId: data.productId,
-            productName: data.productName || data.productDetails || 'Unknown Product',
+            products: data.products || [],
+            deliveryCharge: Number(data.deliveryCharge || 0),
+            totalAmount: Number(data.totalAmount || 0),
             address: data.address,
-            productDetails: data.productDetails || '',
-            price: Number(data.price),
             orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
             deliveryDate: data.deliveryDate?.toDate() || new Date(),
             hasOrderTime: data.hasOrderTime || false,
@@ -113,18 +111,17 @@ export function useFirebaseOrders() {
         ownerId: order.ownerId || user.uid,
         businessId: order.businessId || profile.businessId || profile.email,
         customerId: order.customerId || null,
-        productId: order.productId || null,
-        productName: order.productName,
+        products: order.products || [],
+        deliveryCharge: Number(order.deliveryCharge || 0),
+        totalAmount: Number(order.totalAmount || 0),
         address: order.address || '',
-        productDetails: order.productDetails || '',
-        price: Number(order.price),
         orderDate: order.orderDate,
         deliveryDate: order.deliveryDate,
-        hasOrderTime: order.hasOrderTime,
-        hasDeliveryTime: order.hasDeliveryTime,
+        hasOrderTime: order.hasOrderTime ?? false,
+        hasDeliveryTime: order.hasDeliveryTime ?? false,
         status: order.status,
-        source: order.source,
-        notes: order.notes,
+        source: order.source || 'phone',
+        notes: order.notes || '',
         updatedAt: order.updatedAt || serverTimestamp(),
       };
 
@@ -132,6 +129,15 @@ export function useFirebaseOrders() {
         data.createdAt = order.createdAt || serverTimestamp();
       } else if (order.createdAt) {
         data.createdAt = order.createdAt;
+      }
+
+      // Debug logging to identify undefined fields
+      console.log('📦 Creating order with data:', JSON.stringify(data, null, 2));
+      const undefinedFields = Object.entries(data)
+        .filter(([_, value]) => value === undefined)
+        .map(([key]) => key);
+      if (undefinedFields.length > 0) {
+        console.error('❌ Undefined fields detected:', undefinedFields);
       }
 
       await setDoc(orderDocRef, data, { merge: true });
@@ -169,11 +175,10 @@ export function useFirebaseOrders() {
           ownerId: data.ownerId,
           businessId: data.businessId,
           customerId: data.customerId || '',
-          productId: data.productId,
-          productName: data.productName || data.productDetails || 'Unknown Product',
+          products: data.products || [],
+          deliveryCharge: Number(data.deliveryCharge || 0),
+          totalAmount: Number(data.totalAmount || 0),
           address: data.address,
-          productDetails: data.productDetails || '',
-          price: Number(data.price),
           orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
           deliveryDate: data.deliveryDate?.toDate() || new Date(),
           hasOrderTime: data.hasOrderTime || false,

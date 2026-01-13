@@ -246,7 +246,9 @@ export default function CustomerDetails() {
                                             className="group flex items-center justify-between rounded-lg border p-4 transition-all hover:border-primary/50 cursor-pointer"
                                         >
                                             <div className="space-y-1">
-                                                <p className="font-medium group-hover:text-primary transition-colors">{order.productDetails}</p>
+                                                <p className="font-medium group-hover:text-primary transition-colors">
+                                                    {order.products.map(p => `${p.name} (x${p.quantity})`).join(', ')}
+                                                </p>
                                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                     <Calendar className="h-3 w-3" />
                                                     <span>{format(order.deliveryDate, 'MMM d, yyyy')}</span>
@@ -255,7 +257,7 @@ export default function CustomerDetails() {
                                                 </div>
                                             </div>
                                             <div className="text-right space-y-1">
-                                                <p className="font-bold">${order.price.toLocaleString()}</p>
+                                                <p className="font-bold">${order.totalAmount.toLocaleString()}</p>
                                                 <Badge variant={order.status} className="capitalize">{order.status}</Badge>
                                             </div>
                                         </div>
@@ -309,7 +311,7 @@ export default function CustomerDetails() {
                             <div className="rounded-xl border bg-card p-4 shadow-sm text-center">
                                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Spent</p>
                                 <p className="text-2xl font-bold text-primary">
-                                    ${customerOrders.filter(o => o.status === 'delivered').reduce((sum, o) => sum + o.price, 0).toLocaleString()}
+                                    ${customerOrders.filter(o => o.status === 'delivered').reduce((sum, o) => sum + o.totalAmount, 0).toLocaleString()}
                                 </p>
                             </div>
                         </div>
