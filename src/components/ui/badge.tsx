@@ -13,8 +13,8 @@ const badgeVariants = cva(
         destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
         pending: "border-transparent bg-status-pending text-status-pending-foreground",
-        confirmed: "border-transparent bg-status-confirmed text-status-confirmed-foreground",
-        delivered: "border-transparent bg-status-delivered text-status-delivered-foreground",
+        processing: "border-transparent bg-status-processing text-status-processing-foreground",
+        completed: "border-transparent bg-status-completed text-status-completed-foreground",
         cancelled: "border-transparent bg-status-cancelled text-status-cancelled-foreground",
         whatsapp: "border-transparent bg-source-whatsapp/15 text-source-whatsapp",
         messenger: "border-transparent bg-source-messenger/15 text-source-messenger",
@@ -27,7 +27,7 @@ const badgeVariants = cva(
   },
 );
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
+export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> { }
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return <div className={cn(badgeVariants({ variant }), className)} {...props} />;

@@ -37,10 +37,10 @@ interface ActivityLog {
 interface OrderStats {
     totalOrders: number;
     totalAmount: number;
-    delivered: number;
+    completed: number;
     cancelled: number;
     pending: number;
-    confirmed: number;
+    processing: number;
 }
 
 type TimeRange = 'today' | 'week' | 'month' | 'all';
@@ -59,10 +59,10 @@ export default function AdminDashboard() {
     const [stats, setStats] = useState<OrderStats>({
         totalOrders: 0,
         totalAmount: 0,
-        delivered: 0,
+        completed: 0,
         cancelled: 0,
         pending: 0,
-        confirmed: 0
+        processing: 0
     });
 
     const [ownerDetailOpen, setOwnerDetailOpen] = useState(false);
@@ -145,10 +145,10 @@ export default function AdminDashboard() {
                 setStats({
                     totalOrders: orders.length,
                     totalAmount: orders.reduce((sum, o) => sum + (o.price || 0), 0),
-                    delivered: orders.filter(o => o.status === 'delivered').length,
+                    completed: orders.filter(o => o.status === 'completed').length,
                     cancelled: orders.filter(o => o.status === 'cancelled').length,
                     pending: orders.filter(o => o.status === 'pending').length,
-                    confirmed: orders.filter(o => o.status === 'confirmed').length,
+                    processing: orders.filter(o => o.status === 'processing').length,
                 });
 
                 // B. Fetch User Specific Logs
@@ -384,9 +384,9 @@ export default function AdminDashboard() {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="flex justify-between items-center py-1">
-                                        <StatusItem label="Delivered" count={stats.delivered} color="text-green-600" icon={<CheckCircle2 className="h-4 w-4" />} />
+                                        <StatusItem label="Completed" count={stats.completed} color="text-green-600" icon={<CheckCircle2 className="h-4 w-4" />} />
                                         <Separator orientation="vertical" className="h-10" />
-                                        <StatusItem label="Confirmed" count={stats.confirmed} color="text-blue-600" icon={<Clock className="h-4 w-4" />} />
+                                        <StatusItem label="Processing" count={stats.processing} color="text-blue-600" icon={<Clock className="h-4 w-4" />} />
                                         <Separator orientation="vertical" className="h-10" />
                                         <StatusItem label="Pending" count={stats.pending} color="text-amber-600" icon={<Activity className="h-4 w-4" />} />
                                         <Separator orientation="vertical" className="h-10" />

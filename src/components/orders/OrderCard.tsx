@@ -43,8 +43,8 @@ const sourceLabels = {
 
 const statusLabels = {
   pending: 'Pending',
-  confirmed: 'Confirmed',
-  delivered: 'Delivered',
+  processing: 'Processing',
+  completed: 'Completed',
   cancelled: 'Cancelled',
 };
 
@@ -72,8 +72,8 @@ export function OrderCard({ order, onStatusChange, onViewCustomer, customerName 
       {/* Status indicator bar */}
       <div
         className={`absolute left-0 top-0 h-full w-1 ${order.status === 'pending' ? 'bg-status-pending' :
-          order.status === 'confirmed' ? 'bg-status-confirmed' :
-            order.status === 'delivered' ? 'bg-status-delivered' :
+          order.status === 'processing' ? 'bg-status-processing' :
+            order.status === 'completed' ? 'bg-status-completed' :
               'bg-status-cancelled'
           }`}
       />
@@ -103,13 +103,13 @@ export function OrderCard({ order, onStatusChange, onViewCustomer, customerName 
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-card" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem onClick={() => onStatusChange(order.id, 'confirmed')}>
-                <CheckCircle2 className="mr-2 h-4 w-4 text-status-confirmed" />
-                Mark Confirmed
+              <DropdownMenuItem onClick={() => onStatusChange(order.id, 'processing')}>
+                <CheckCircle2 className="mr-2 h-4 w-4 text-status-processing" />
+                Mark Processing
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onStatusChange(order.id, 'delivered')}>
-                <Truck className="mr-2 h-4 w-4 text-status-delivered" />
-                Mark Delivered
+              <DropdownMenuItem onClick={() => onStatusChange(order.id, 'completed')}>
+                <Truck className="mr-2 h-4 w-4 text-status-completed" />
+                Mark Completed
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

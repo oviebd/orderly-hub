@@ -7,8 +7,8 @@ interface StatusTabsProps {
   counts: {
     all: number;
     pending: number;
-    confirmed: number;
-    delivered: number;
+    processing: number;
+    completed: number;
     cancelled: number;
     today: number;
   };
@@ -18,8 +18,8 @@ const tabs = [
   { id: 'all', label: 'All Orders' },
   { id: 'today', label: 'Today' },
   { id: 'pending', label: 'Pending' },
-  { id: 'confirmed', label: 'Confirmed' },
-  { id: 'delivered', label: 'Delivered' },
+  { id: 'processing', label: 'Processing' },
+  { id: 'completed', label: 'Completed' },
   { id: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -38,11 +38,11 @@ export function StatusTabs({ activeTab, onTabChange, counts }: StatusTabsProps) 
           )}
         >
           {tab.label}
-          <span 
+          <span
             className={cn(
               "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-medium",
-              activeTab === tab.id 
-                ? "bg-primary-foreground/20 text-primary-foreground" 
+              activeTab === tab.id
+                ? "bg-primary-foreground/20 text-primary-foreground"
                 : "bg-muted text-muted-foreground"
             )}
           >

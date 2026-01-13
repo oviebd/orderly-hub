@@ -37,7 +37,7 @@ export default function Dashboard() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [experienceOpen, setExperienceOpen] = useState(false);
   const [orderToDeliver, setOrderToDeliver] = useState<Order | null>(null);
-  const [targetFeedbackStatus, setTargetFeedbackStatus] = useState<OrderStatus>('delivered');
+  const [targetFeedbackStatus, setTargetFeedbackStatus] = useState<OrderStatus>('completed');
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importTotal, setImportTotal] = useState(0);
@@ -253,8 +253,8 @@ export default function Dashboard() {
         return orderDate.getTime() === today.getTime();
       }).length,
       pending: orders.filter(o => o.status === 'pending').length,
-      confirmed: orders.filter(o => o.status === 'confirmed').length,
-      delivered: orders.filter(o => o.status === 'delivered').length,
+      processing: orders.filter(o => o.status === 'processing').length,
+      completed: orders.filter(o => o.status === 'completed').length,
       cancelled: orders.filter(o => o.status === 'cancelled').length,
     };
   };
@@ -263,7 +263,7 @@ export default function Dashboard() {
   const statusCounts = getStatusCounts();
 
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
-    if (status === 'delivered' || status === 'cancelled') {
+    if (status === 'completed' || status === 'cancelled') {
       const order = orders.find(o => o.id === orderId);
       if (order) {
         setOrderToDeliver(order);
@@ -304,7 +304,7 @@ export default function Dashboard() {
       });
 
       toast({
-        title: targetFeedbackStatus === 'cancelled' ? 'Order cancelled' : 'Order delivered',
+        title: targetFeedbackStatus === 'cancelled' ? 'Order cancelled' : 'Order completed',
         description: 'Feedback recorded successfully',
       });
 

@@ -1,4 +1,4 @@
-export type OrderStatus = 'pending' | 'confirmed' | 'delivered' | 'cancelled';
+export type OrderStatus = 'pending' | 'processing' | 'completed' | 'cancelled';
 export type OrderSource = 'whatsapp' | 'messenger' | 'phone';
 
 export interface Customer {

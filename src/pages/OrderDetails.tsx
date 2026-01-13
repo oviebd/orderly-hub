@@ -40,7 +40,7 @@ export default function OrderDetails() {
     const [experience, setExperience] = useState<Experience | null>(null);
     const [loading, setLoading] = useState(true);
     const [experienceOpen, setExperienceOpen] = useState(false);
-    const [targetFeedbackStatus, setTargetFeedbackStatus] = useState<OrderStatus>('delivered');
+    const [targetFeedbackStatus, setTargetFeedbackStatus] = useState<OrderStatus>('completed');
     const [isEditingExperience, setIsEditingExperience] = useState(false);
 
     // Form state
@@ -93,7 +93,7 @@ export default function OrderDetails() {
                 setSource(orderData.source);
                 setNotes(orderData.notes);
 
-                if (orderData.status === 'delivered' || orderData.status === 'cancelled') {
+                if (orderData.status === 'completed' || orderData.status === 'cancelled') {
                     const expData = await getExperienceByOrderId(orderId);
                     setExperience(expData);
                 }
@@ -233,7 +233,7 @@ export default function OrderDetails() {
     const handleStatusChange = async (newStatus: OrderStatus) => {
         if (!order) return;
 
-        if (newStatus === 'delivered' || newStatus === 'cancelled') {
+        if (newStatus === 'completed' || newStatus === 'cancelled') {
             setTargetFeedbackStatus(newStatus);
             setIsEditingExperience(false);
             setExperienceOpen(true);
@@ -349,8 +349,8 @@ export default function OrderDetails() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="confirmed">Confirmed</SelectItem>
-                                <SelectItem value="delivered">Delivered</SelectItem>
+                                <SelectItem value="processing">Processing</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
                                 <SelectItem value="cancelled">Cancelled</SelectItem>
                             </SelectContent>
                         </Select>
@@ -604,7 +604,7 @@ export default function OrderDetails() {
                         <div className="flex items-center gap-2 text-primary">
                             <MessageSquare className="h-5 w-5" />
                             <h2 className="font-semibold text-lg">
-                                {order.status === 'cancelled' ? 'Cancellation Feedback' : 'Delivery Experience'}
+                                {order.status === 'cancelled' ? 'Cancellation Feedback' : 'Completion Experience'}
                             </h2>
                         </div>
 

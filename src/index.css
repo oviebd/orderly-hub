@@ -39,10 +39,10 @@
     /* Status colors */
     --status-pending: 45 93% 47%;
     --status-pending-foreground: 45 93% 15%;
-    --status-confirmed: 217 91% 60%;
-    --status-confirmed-foreground: 0 0% 100%;
-    --status-delivered: 142 71% 45%;
-    --status-delivered-foreground: 0 0% 100%;
+    --status-processing: 217 91% 60%;
+    --status-processing-foreground: 0 0% 100%;
+    --status-completed: 142 71% 45%;
+    --status-completed-foreground: 0 0% 100%;
     --status-cancelled: 0 72% 55%;
     --status-cancelled-foreground: 0 0% 100%;
 
