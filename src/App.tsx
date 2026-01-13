@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import Dashboard from "./pages/Dashboard";
+import Orders from "./pages/Orders";
 import Customers from "./pages/Customers";
 import CustomerDetails from "./pages/CustomerDetails";
 import OrderDetails from "./pages/OrderDetails";
@@ -74,6 +75,12 @@ const App = () => (
             <Route path="/dashboard" element={
               <ProtectedRoute role="business">
                 <Dashboard />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/orders" element={
+              <ProtectedRoute role="business">
+                <Orders />
               </ProtectedRoute>
             } />
 

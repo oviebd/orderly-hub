@@ -1,4 +1,4 @@
-import { Package, LogOut, User, Menu, ShoppingBag } from 'lucide-react';
+import { Package, LogOut, User, Menu, ShoppingBag, LayoutDashboard, ListOrdered } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -39,7 +39,15 @@ export function DashboardLayout({ children, businessName = 'My Business', onLogo
                     className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Package className="h-5 w-5" />
+                    <LayoutDashboard className="h-5 w-5" />
+                    Dashboard
+                  </Link>
+                  <Link
+                    to="/orders"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <ListOrdered className="h-5 w-5" />
                     Orders
                   </Link>
                   <Link
@@ -69,7 +77,8 @@ export function DashboardLayout({ children, businessName = 'My Business', onLogo
               <span className="hidden font-semibold sm:inline-block">OrderFlow</span>
             </Link>
             <nav className="ml-6 hidden items-center gap-4 md:flex">
-              <Link to="/dashboard" className="text-sm font-medium transition-colors hover:text-primary">Orders</Link>
+              <Link to="/dashboard" className="text-sm font-medium transition-colors hover:text-primary">Dashboard</Link>
+              <Link to="/orders" className="text-sm font-medium transition-colors hover:text-primary">Orders</Link>
               <Link to="/products" className="text-sm font-medium transition-colors hover:text-primary">Products</Link>
               <Link to="/customers" className="text-sm font-medium transition-colors hover:text-primary">Customers</Link>
             </nav>
