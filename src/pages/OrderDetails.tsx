@@ -313,8 +313,8 @@ export default function OrderDetails() {
             <DashboardLayout businessName={profile?.businessName || 'My Business'} onLogout={handleLogout}>
                 <div className="flex flex-col items-center justify-center py-12">
                     <h2 className="text-xl font-semibold">Order not found</h2>
-                    <Button variant="ghost" className="mt-4 gap-2" onClick={() => navigate('/dashboard')}>
-                        <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+                    <Button variant="ghost" className="mt-4 gap-2" onClick={() => navigate('/orders')}>
+                        <ArrowLeft className="h-4 w-4" /> Back to Orders
                     </Button>
                 </div>
             </DashboardLayout>
@@ -325,7 +325,7 @@ export default function OrderDetails() {
         <DashboardLayout businessName={profile?.businessName || 'My Business'} onLogout={handleLogout}>
             <div className="max-w-3xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
-                    <Button variant="ghost" className="gap-2" onClick={() => navigate('/dashboard')}>
+                    <Button variant="ghost" className="gap-2" onClick={() => navigate('/orders')}>
                         <ArrowLeft className="h-4 w-4" /> Back
                     </Button>
                     <div className="flex items-center gap-3">
@@ -337,7 +337,7 @@ export default function OrderDetails() {
                                 if (confirm('Are you sure you want to delete this order?')) {
                                     await deleteOrder(orderId!);
                                     toast({ title: 'Order deleted' });
-                                    navigate('/dashboard');
+                                    navigate('/orders');
                                 }
                             }}
                         >

@@ -9,7 +9,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -19,6 +20,16 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, businessName = 'My Business', onLogout }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
+
+  const isActive = (path: string) => location.pathname === path;
+
+  const navItems = [
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: 'Orders', path: '/orders', icon: ListOrdered },
+    { label: 'Products', path: '/products', icon: ShoppingBag },
+    { label: 'Customers', path: '/customers', icon: User },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,39 +44,23 @@ export function DashboardLayout({ children, businessName = 'My Business', onLogo
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-[280px] bg-card">
-                <nav className="flex flex-col gap-4 pt-8">
-                  <Link
-                    to="/dashboard"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <LayoutDashboard className="h-5 w-5" />
-                    Dashboard
-                  </Link>
-                  <Link
-                    to="/orders"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <ListOrdered className="h-5 w-5" />
-                    Orders
-                  </Link>
-                  <Link
-                    to="/products"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <ShoppingBag className="h-5 w-5" />
-                    Products
-                  </Link>
-                  <Link
-                    to="/customers"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-foreground transition-colors hover:bg-secondary"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <User className="h-5 w-5" />
-                    Customers
-                  </Link>
+                <nav className="flex flex-col gap-2 pt-8">
+                  {navItems.map((item) => (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                        isActive(item.path)
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      )}
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      {item.label}
+                    </Link>
+                  ))}
                 </nav>
               </SheetContent>
             </Sheet>
@@ -76,11 +71,21 @@ export function DashboardLayout({ children, businessName = 'My Business', onLogo
               </div>
               <span className="hidden font-semibold sm:inline-block">OrderFlow</span>
             </Link>
-            <nav className="ml-6 hidden items-center gap-4 md:flex">
-              <Link to="/dashboard" className="text-sm font-medium transition-colors hover:text-primary">Dashboard</Link>
-              <Link to="/orders" className="text-sm font-medium transition-colors hover:text-primary">Orders</Link>
-              <Link to="/products" className="text-sm font-medium transition-colors hover:text-primary">Products</Link>
-              <Link to="/customers" className="text-sm font-medium transition-colors hover:text-primary">Customers</Link>
+            <nav className="ml-6 hidden items-center gap-1 md:flex">
+              {navItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={cn(
+                    "text-sm font-medium transition-colors px-3 py-1.5 rounded-md",
+                    isActive(item.path)
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
 
