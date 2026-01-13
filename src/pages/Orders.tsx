@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { OrderCard } from '@/components/orders/OrderCard';
-import { StatusTabs } from '@/components/orders/StatusTabs';
 import { AddOrderDialog, AddOrderDialogProps } from '@/components/orders/AddOrderDialog';
 import { CustomerDialog } from '@/components/customers/CustomerDialog';
 import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
 import { Button } from '@/components/ui/button';
-import { Plus, Package, Loader2, Search, ArrowUpDown, ShoppingBag, Download, Upload } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Package, Loader2, Search, ArrowUpDown, ShoppingBag, Download, Upload, Filter, Calendar, X } from 'lucide-react';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
@@ -23,16 +23,22 @@ import { DateRangePicker } from '@/components/dashboard/DateRangePicker';
 import { DateRange } from 'react-day-picker';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 
+const STATUS_OPTIONS: { id: OrderStatus; label: string; color: string }[] = [
+    { id: 'pending', label: 'Pending', color: 'bg-status-pending' },
+    { id: 'processing', label: 'Processing', color: 'bg-status-processing' },
+    { id: 'completed', label: 'Completed', color: 'bg-status-completed' },
+    { id: 'cancelled', label: 'Cancelled', color: 'bg-status-cancelled' },
+];
 
 export default function Orders() {
     const navigate = useNavigate();
     const { user, profile, loading: authLoading, signOut } = useFirebaseAuth();
-    const { orders, isLoading: ordersLoading, error: ordersError, createOrder, updateOrderStatus, isCreating } = useFirebaseOrders();
-    const { customers, isLoading: customersLoading, error: customersError, createCustomer, updateCustomer, findCustomerByPhone } = useFirebaseCustomers();
+    const { orders, isLoading: ordersLoading, error: ordersError, createOrder, updateOrderStatus, deleteOrder, isCreating } = useFirebaseOrders();
+    const { customers, isLoading: customersLoading, error: customersError, updateCustomer } = useFirebaseCustomers();
     const { createExperience, isLoading: experienceLoading } = useFirebaseExperience();
     const { toast } = useToast();
 
-    const [activeTab, setActiveTab] = useState('all');
+    const [selectedStatuses, setSelectedStatuses] = useState<OrderStatus[]>([]);
     const [dateRangeType, setDateRangeType] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
     const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>(undefined);
     const [searchQuery, setSearchQuery] = useState('');
@@ -57,6 +63,23 @@ export default function Orders() {
     }, [user, authLoading, navigate]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const toggleStatus = (status: OrderStatus) => {
+        setSelectedStatuses(prev =>
+            prev.includes(status)
+                ? prev.filter(s => s !== status)
+                : [...prev, status]
+        );
+    };
+
+    const clearFilters = () => {
+        setSelectedStatuses([]);
+        setDateRangeType('all');
+        setCustomDateRange(undefined);
+        setSearchQuery('');
+    };
+
+    const hasActiveFilters = selectedStatuses.length > 0 || dateRangeType !== 'all' || searchQuery.trim().length > 0;
 
     const handleExport = () => {
         const dataToExport = orders.map(o => {
@@ -122,7 +145,6 @@ export default function Orders() {
                 let successCount = 0;
                 let errorCount = 0;
 
-
                 const loadingToast = sonnerToast.loading(`Importing 0/${data.length} orders...`);
 
                 for (let i = 0; i < data.length; i++) {
@@ -132,7 +154,6 @@ export default function Orders() {
                     setImportProgress(i + 1);
 
                     sonnerToast.loading(`Processing ${itemName}...`, { id: loadingToast });
-
 
                     try {
                         if (!row['Customer ID'] || !row['Product Name'] || row['Price'] === undefined) {
@@ -151,7 +172,7 @@ export default function Orders() {
                             ownerId: row['Owner ID'] || user!.uid,
                             businessId: row['Business ID'] || profile!.businessId!,
                             customerId: row['Customer ID'],
-                            products: row['Products'] ? [] : [{ // Fallback if old format or manual Products column missing
+                            products: row['Products'] ? [] : [{
                                 id: row['Product ID'] || Math.random().toString(36).substr(2, 9),
                                 name: String(row['Product Name']),
                                 price: price,
@@ -226,15 +247,9 @@ export default function Orders() {
             );
         }
 
-        // Tab Status Filter
-        if (activeTab !== 'all' && activeTab !== 'today') {
-            filtered = filtered.filter(order => order.status === activeTab);
-        } else if (activeTab === 'today') {
-            const today = startOfDay(now);
-            filtered = filtered.filter(order => {
-                const orderDate = startOfDay(new Date(order.deliveryDate));
-                return orderDate.getTime() === today.getTime();
-            });
+        // Multi-Status Filter
+        if (selectedStatuses.length > 0) {
+            filtered = filtered.filter(order => selectedStatuses.includes(order.status));
         }
 
         // Search Filter
@@ -265,14 +280,7 @@ export default function Orders() {
     };
 
     const getStatusCounts = () => {
-        const today = startOfDay(new Date());
-
         return {
-            all: orders.length,
-            today: orders.filter(order => {
-                const orderDate = startOfDay(new Date(order.deliveryDate));
-                return orderDate.getTime() === today.getTime();
-            }).length,
             pending: orders.filter(o => o.status === 'pending').length,
             processing: orders.filter(o => o.status === 'processing').length,
             completed: orders.filter(o => o.status === 'completed').length,
@@ -313,10 +321,8 @@ export default function Orders() {
         if (!orderToDeliver) return;
 
         try {
-            // 1. Update order status
             await updateOrderStatus({ orderId: orderToDeliver.id, status: targetFeedbackStatus });
 
-            // 2. Create experience record
             await createExperience({
                 rating,
                 comment,
@@ -348,6 +354,25 @@ export default function Orders() {
         }
     };
 
+    const handleDeleteOrder = async (orderId: string) => {
+        if (!window.confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
+            return;
+        }
+        try {
+            await deleteOrder(orderId);
+            toast({
+                title: 'Order deleted',
+                description: 'The order has been permanently removed.',
+            });
+        } catch (error) {
+            toast({
+                title: 'Error',
+                description: 'Failed to delete order',
+                variant: 'destructive',
+            });
+        }
+    };
+
     const handleUpdateCustomer = async (customerId: string, updates: Partial<Customer>) => {
         try {
             await updateCustomer({ customerId, updates });
@@ -369,7 +394,6 @@ export default function Orders() {
 
     const handleAddOrder = async (orderData: Parameters<AddOrderDialogProps['onSubmit']>[0]) => {
         try {
-            // Customer creation is handled inside AddOrderDialog
             await createOrder({
                 ownerId: user!.uid,
                 businessId: profile!.businessId!,
@@ -444,9 +468,9 @@ export default function Orders() {
                         </div>
                     </div>
                 </div>
-            )/* overlay loader during import */}
+            )}
 
-            <div className="space-y-6">
+            <div className="space-y-5">
                 {/* Error State */}
                 {(ordersError || customersError) && (
                     <div className="bg-destructive/15 text-destructive p-4 rounded-lg border border-destructive/20 animate-fade-in">
@@ -455,11 +479,11 @@ export default function Orders() {
                     </div>
                 )}
 
-                {/* Permission Restriction Banner */}
+                {/* Permission Restriction Banners */}
                 {profile?.status === 'disabled' && (
                     <div className="bg-destructive text-destructive-foreground p-4 rounded-lg border animate-pulse">
                         <h2 className="font-semibold italic">Account Disabled</h2>
-                        <p className="text-sm">Your account has been disabled by the administrator. Many features will be restricted.</p>
+                        <p className="text-sm">Your account has been disabled by the administrator.</p>
                     </div>
                 )}
 
@@ -469,7 +493,7 @@ export default function Orders() {
                             <ShoppingBag className="h-4 w-4" />
                             Order Creation Restricted
                         </h2>
-                        <p className="text-sm">The administrator has restricted your capability to create new orders. Please contact support if this is an error.</p>
+                        <p className="text-sm">The administrator has restricted your capability to create new orders.</p>
                     </div>
                 )}
 
@@ -477,7 +501,7 @@ export default function Orders() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
-                        <p className="text-muted-foreground">Manage your orders and track deliveries</p>
+                        <p className="text-muted-foreground text-sm">{orders.length} total orders</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <input
@@ -487,115 +511,145 @@ export default function Orders() {
                             accept=".xlsx, .xls"
                             className="hidden"
                         />
-                        <Button variant="outline" onClick={handleImportClick} className="gap-2">
+                        <Button variant="outline" size="sm" onClick={handleImportClick} className="gap-1.5">
                             <Upload className="h-4 w-4" />
                             Import
                         </Button>
-                        <Button variant="outline" onClick={handleExport} className="gap-2">
+                        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
                             <Download className="h-4 w-4" />
                             Export
                         </Button>
                         <Button
                             onClick={() => setAddOrderOpen(true)}
-                            className="gap-2"
+                            size="sm"
+                            className="gap-1.5"
                             disabled={isCreating || profile?.canCreateOrders === false || profile?.status === 'disabled'}
                         >
-                            {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
+                            {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                             New Order
                         </Button>
                     </div>
                 </div>
 
-                {/* Filters and Search */}
-                <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                {/* Unified Filter Card */}
+                <div className="bg-card rounded-xl border shadow-sm p-4 space-y-4">
+                    {/* Search & Sort Row */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Search by name, phone, or details..."
+                                placeholder="Search orders by customer, phone, or product..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 bg-card"
+                                className="pl-9 h-10 bg-background"
                             />
                         </div>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                                className={cn("gap-2 bg-card")}
-                            >
-                                <ArrowUpDown className="h-4 w-4" />
-                                Order Time {sortOrder === 'asc' ? '(Oldest)' : '(Newest)'}
-                            </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                            className="gap-2 h-10 px-4 whitespace-nowrap"
+                        >
+                            <ArrowUpDown className="h-4 w-4" />
+                            {sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
+                        </Button>
+                    </div>
+
+                    {/* Filter Row */}
+                    <div className="flex flex-wrap items-center gap-3">
+                        {/* Status Filters */}
+                        <div className="flex items-center gap-2">
+                            <Filter className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {STATUS_OPTIONS.map((status) => {
+                                const isSelected = selectedStatuses.includes(status.id);
+                                const count = statusCounts[status.id];
+                                return (
+                                    <button
+                                        key={status.id}
+                                        onClick={() => toggleStatus(status.id)}
+                                        className={cn(
+                                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                                            isSelected
+                                                ? "bg-primary text-primary-foreground shadow-sm"
+                                                : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                                        )}
+                                    >
+                                        <div className={cn("h-2 w-2 rounded-full", isSelected ? "bg-primary-foreground" : status.color)} />
+                                        {status.label}
+                                        <span className={cn(
+                                            "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px]",
+                                            isSelected ? "bg-primary-foreground/20" : "bg-background"
+                                        )}>
+                                            {count}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className="h-4 w-[1px] bg-border mx-1 hidden sm:block" />
+
+                        {/* Date Filters */}
+                        <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Time:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {(['all', 'today', 'week', 'month'] as const).map((type) => (
+                                <button
+                                    key={type}
+                                    onClick={() => { setDateRangeType(type); setCustomDateRange(undefined); }}
+                                    className={cn(
+                                        "px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                                        dateRangeType === type
+                                            ? "bg-primary text-primary-foreground shadow-sm"
+                                            : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                                    )}
+                                >
+                                    {type === 'all' ? 'All' : type === 'today' ? 'Today' : type === 'week' ? 'Week' : 'Month'}
+                                </button>
+                            ))}
+                            <DateRangePicker
+                                date={customDateRange}
+                                onDateChange={(range) => {
+                                    setCustomDateRange(range);
+                                    setDateRangeType('custom');
+                                }}
+                                className="w-[200px]"
+                            />
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 bg-card p-1 rounded-lg border w-fit">
-                        <Button
-                            variant={dateRangeType === 'all' ? 'default' : 'ghost'}
-                            size="sm"
-                            onClick={() => { setDateRangeType('all'); setCustomDateRange(undefined); }}
-                            className="h-8"
-                        >
-                            All Time
-                        </Button>
-                        <Button
-                            variant={dateRangeType === 'today' ? 'default' : 'ghost'}
-                            size="sm"
-                            onClick={() => { setDateRangeType('today'); setCustomDateRange(undefined); }}
-                            className="h-8"
-                        >
-                            Today
-                        </Button>
-                        <Button
-                            variant={dateRangeType === 'week' ? 'default' : 'ghost'}
-                            size="sm"
-                            onClick={() => { setDateRangeType('week'); setCustomDateRange(undefined); }}
-                            className="h-8"
-                        >
-                            This Week
-                        </Button>
-                        <Button
-                            variant={dateRangeType === 'month' ? 'default' : 'ghost'}
-                            size="sm"
-                            onClick={() => { setDateRangeType('month'); setCustomDateRange(undefined); }}
-                            className="h-8"
-                        >
-                            This Month
-                        </Button>
-                        <div className="h-4 w-[1px] bg-border mx-1" />
-                        <DateRangePicker
-                            date={customDateRange}
-                            onDateChange={(range) => {
-                                setCustomDateRange(range);
-                                setDateRangeType('custom');
-                            }}
-                            className="w-[260px] border-none"
-                        />
-                    </div>
+                    {/* Active Filters Summary */}
+                    {hasActiveFilters && (
+                        <div className="flex items-center gap-2 pt-2 border-t">
+                            <span className="text-xs text-muted-foreground">
+                                Showing {filteredOrders.length} of {orders.length} orders
+                            </span>
+                            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-6 px-2 text-xs gap-1">
+                                <X className="h-3 w-3" />
+                                Clear all
+                            </Button>
+                        </div>
+                    )}
                 </div>
 
-                {/* Status Tabs */}
-                <StatusTabs
-                    activeTab={activeTab}
-                    onTabChange={setActiveTab}
-                    counts={statusCounts}
-                />
-
                 {/* Orders List */}
-                <div className="space-y-4">
+                <div className="space-y-3">
                     {filteredOrders.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 animate-fade-in">
-                            <Package className="h-12 w-12 text-muted-foreground/50" />
+                        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 bg-card/50">
+                            <Package className="h-14 w-14 text-muted-foreground/30" />
                             <h3 className="mt-4 text-lg font-medium">No orders found</h3>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                {activeTab === 'all'
-                                    ? "Create your first order to get started"
-                                    : `No ${activeTab} orders at the moment`
+                            <p className="mt-1 text-sm text-muted-foreground text-center max-w-sm">
+                                {hasActiveFilters
+                                    ? "Try adjusting your filters to see more results"
+                                    : "Create your first order to get started"
                                 }
                             </p>
-                            {activeTab === 'all' && (
+                            {!hasActiveFilters && (
                                 <Button
                                     onClick={() => setAddOrderOpen(true)}
                                     className="mt-4 gap-2"
@@ -608,12 +662,13 @@ export default function Orders() {
                         </div>
                     ) : (
                         filteredOrders.map((order, index) => (
-                            <div key={order.id} style={{ animationDelay: `${index * 50}ms` }}>
+                            <div key={order.id} className="animate-fade-in" style={{ animationDelay: `${index * 30}ms` }}>
                                 <OrderCard
                                     order={order}
                                     customerName={customers.find(c => c.id === order.customerId)?.name}
                                     onStatusChange={handleStatusChange}
                                     onViewCustomer={handleViewCustomer}
+                                    onDelete={handleDeleteOrder}
                                 />
                             </div>
                         ))

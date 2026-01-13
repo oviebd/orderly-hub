@@ -1,16 +1,15 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Order, OrderStatus } from '@/types';
 import {
   MessageCircle,
   Phone,
-  Calendar,
-  Clock,
   MoreHorizontal,
   CheckCircle2,
   XCircle,
-  Truck
+  Truck,
+  Clock,
+  Trash2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -19,13 +18,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { format, isToday, isTomorrow, isPast } from 'date-fns';
+import { format, isToday, isTomorrow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
 interface OrderCardProps {
   order: Order;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
   onViewCustomer: (customerId: string) => void;
+  onDelete?: (orderId: string) => void;
   customerName?: string;
 }
 
@@ -41,133 +41,114 @@ const sourceLabels = {
   phone: 'Phone',
 };
 
-const statusLabels = {
-  pending: 'Pending',
-  processing: 'Processing',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-};
-
-function formatDateTime(date: Date, hasTime: boolean): string {
-  const datePart = isToday(date) ? 'Today' : isTomorrow(date) ? 'Tomorrow' : format(date, 'MMM d');
-  return hasTime ? `${datePart} at ${format(date, 'h:mm a')}` : datePart;
+function formatShortDate(date: Date): string {
+  if (isToday(date)) return 'Today';
+  if (isTomorrow(date)) return 'Tomorrow';
+  return format(date, 'MMM d');
 }
 
-export function OrderCard({ order, onStatusChange, onViewCustomer, customerName }: OrderCardProps) {
+export function OrderCard({ order, onStatusChange, onDelete, customerName }: OrderCardProps) {
   const navigate = useNavigate();
   const SourceIcon = sourceIcons[order.source];
-  const isOverdue = isPast(order.deliveryDate) && order.status === 'pending';
+
+  // Create a comma-separated product list
+  const productList = order.products.map(p => `${p.name} x${p.quantity}`).join(', ');
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Prevent navigation if clicking on a button or menu
     if ((e.target as HTMLElement).closest('button')) return;
     navigate(`/orders/${order.id}`);
   };
 
   return (
-    <Card
-      className="group relative overflow-hidden p-4 transition-all hover:shadow-md cursor-pointer animate-fade-in"
+    <div
+      className="group relative flex items-center gap-4 p-3 bg-card rounded-lg border hover:shadow-md hover:border-primary/30 cursor-pointer transition-all"
       onClick={handleCardClick}
     >
-      {/* Status indicator bar */}
+      {/* Status Indicator */}
       <div
-        className={`absolute left-0 top-0 h-full w-1 ${order.status === 'pending' ? 'bg-status-pending' :
-          order.status === 'processing' ? 'bg-status-processing' :
-            order.status === 'completed' ? 'bg-status-completed' :
-              'bg-status-cancelled'
+        className={`absolute left-0 top-0 h-full w-1 rounded-l-lg ${order.status === 'pending' ? 'bg-status-pending' :
+            order.status === 'processing' ? 'bg-status-processing' :
+              order.status === 'completed' ? 'bg-status-completed' :
+                'bg-status-cancelled'
           }`}
       />
 
-      <div className="pl-3">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold truncate">{customerName || 'Unknown Customer'}</h3>
-              <Badge variant={order.source}>{sourceLabels[order.source]}</Badge>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {order.products.length} {order.products.length === 1 ? 'item' : 'items'}
-            </div>
+      {/* Main Content */}
+      <div className="flex-1 min-w-0 pl-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
+        {/* Row 1: Customer Name + Source | Status + Amount */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-semibold truncate">{customerName || 'Unknown'}</span>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+            <SourceIcon className="h-3 w-3" />
+            <span>{sourceLabels[order.source]}</span>
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-card" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem onClick={() => onStatusChange(order.id, 'processing')}>
-                <CheckCircle2 className="mr-2 h-4 w-4 text-status-processing" />
-                Mark Processing
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onStatusChange(order.id, 'completed')}>
-                <Truck className="mr-2 h-4 w-4 text-status-completed" />
-                Mark Completed
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => onStatusChange(order.id, 'cancelled')}
-                className="text-destructive focus:text-destructive"
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                Cancel Order
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        </div>
+        <div className="flex items-center gap-2 justify-end">
+          <span className="text-base font-bold font-mono">৳{order.totalAmount.toLocaleString()}</span>
+          <Badge variant={order.status} className="text-[10px] px-2 py-0.5">
+            {order.status}
+          </Badge>
         </div>
 
-        {/* Product Details */}
-        <div className="mt-3 space-y-1">
-          {order.products.map((p, i) => (
-            <div key={i} className="text-sm flex justify-between gap-2">
-              <span className="text-foreground truncate">
-                {p.name} <span className="text-muted-foreground text-xs">x{p.quantity}</span>
-              </span>
-              <span className="text-muted-foreground text-xs shrink-0">${(p.price * p.quantity).toFixed(2)}</span>
-            </div>
-          ))}
-          {order.deliveryCharge > 0 && (
-            <div className="text-xs text-muted-foreground flex justify-between">
-              <span>Delivery Charge</span>
-              <span>${order.deliveryCharge.toFixed(2)}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Notes */}
-        {order.notes && (
-          <p className="mt-2 text-sm text-muted-foreground italic">"{order.notes}"</p>
-        )}
-
-        {/* Footer */}
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1.5">
-            <div className={`flex items-center gap-1.5 text-xs ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-              <Calendar className="h-3.5 w-3.5 shrink-0" />
-              <span className="font-medium">Delivery:</span>
-              <span>{formatDateTime(order.deliveryDate, order.hasDeliveryTime)}</span>
-              {isOverdue && <span className="text-[10px] ml-1 uppercase font-bold">(Overdue)</span>}
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span className="font-medium">Ordered:</span>
-              <span>{formatDateTime(order.orderDate, order.hasOrderTime)}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-            <span className="text-lg font-semibold">${order.totalAmount.toFixed(2)}</span>
-            <Badge variant={order.status}>{statusLabels[order.status]}</Badge>
-          </div>
+        {/* Row 2: Products | Times */}
+        <p className="text-xs text-muted-foreground truncate">
+          {productList}
+        </p>
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground justify-end">
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {formatShortDate(order.orderDate)}
+          </span>
+          <span>→</span>
+          <span className="font-medium text-foreground">
+            {formatShortDate(order.deliveryDate)}
+          </span>
         </div>
       </div>
-    </Card>
+
+      {/* Actions Menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="bg-card" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuItem onClick={() => onStatusChange(order.id, 'processing')}>
+            <CheckCircle2 className="mr-2 h-4 w-4 text-status-processing" />
+            Mark Processing
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onStatusChange(order.id, 'completed')}>
+            <Truck className="mr-2 h-4 w-4 text-status-completed" />
+            Mark Completed
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => onStatusChange(order.id, 'cancelled')}
+            className="text-amber-600 focus:text-amber-600"
+          >
+            <XCircle className="mr-2 h-4 w-4" />
+            Cancel Order
+          </DropdownMenuItem>
+          {onDelete && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => onDelete(order.id)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Order
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
