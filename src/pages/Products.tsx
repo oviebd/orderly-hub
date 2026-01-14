@@ -3,7 +3,8 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, Package, Trash2, Download, Upload } from 'lucide-react';
+import { Loader2, Plus, Package, Trash2, Download, Upload, AlertCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNavigate, Link } from 'react-router-dom';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 import {
@@ -202,20 +203,84 @@ export default function Products() {
                             accept=".xlsx, .xls"
                             className="hidden"
                         />
-                        <Button variant="outline" onClick={handleImportClick} className="w-full sm:w-auto gap-2">
-                            <Upload className="h-4 w-4" />
-                            Import
-                        </Button>
-                        <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto gap-2">
-                            <Download className="h-4 w-4" />
-                            Export
-                        </Button>
-                        <Button asChild>
-                            <Link to="/products/new">
-                                <Plus className="mr-2 h-4 w-4" />
-                                Add Product
-                            </Link>
-                        </Button>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="w-full sm:w-auto">
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleImportClick}
+                                            className="w-full gap-2"
+                                            disabled={profile?.capabilities?.hasExportImportOption === false}
+                                        >
+                                            <Upload className="h-4 w-4" />
+                                            Import
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                {profile?.capabilities?.hasExportImportOption === false && (
+                                    <TooltipContent>
+                                        <p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Upgrade your plan to use Import feature</p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="w-full sm:w-auto">
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleExport}
+                                            className="w-full gap-2"
+                                            disabled={profile?.capabilities?.hasExportImportOption === false}
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            Export
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                {profile?.capabilities?.hasExportImportOption === false && (
+                                    <TooltipContent>
+                                        <p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Upgrade your plan to use Export feature</p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="w-full sm:w-auto">
+                                        {(() => {
+                                            const isRestricted = profile?.capabilities?.canAddProducts === false;
+                                            const isLimitReached = products.length >= (profile?.capabilities?.maxProductNumber || 0);
+                                            const isDisabled = isRestricted || isLimitReached || profile?.status === 'disabled';
+
+                                            return (
+                                                <Button
+                                                    disabled={isDisabled}
+                                                    className="w-full"
+                                                    onClick={() => !isDisabled && navigate('/products/new')}
+                                                >
+                                                    <Plus className="mr-2 h-4 w-4" />
+                                                    Add Product
+                                                </Button>
+                                            );
+                                        })()}
+                                    </div>
+                                </TooltipTrigger>
+                                {(() => {
+                                    const isRestricted = profile?.capabilities?.canAddProducts === false;
+                                    const isLimitReached = products.length >= (profile?.capabilities?.maxProductNumber || 0);
+
+                                    if (isRestricted) {
+                                        return <TooltipContent><p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Product creation is disabled for your plan</p></TooltipContent>;
+                                    }
+                                    if (isLimitReached) {
+                                        return <TooltipContent><p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Product limit reached ({profile?.capabilities?.maxProductNumber}). Upgrade to add more.</p></TooltipContent>;
+                                    }
+                                    return null;
+                                })()}
+                            </Tooltip>
+                        </TooltipProvider>
                     </div>
                 </div>
 
@@ -236,12 +301,35 @@ export default function Products() {
                                 </div>
                                 <h3 className="text-lg font-medium">No products found</h3>
                                 <p className="text-muted-foreground mb-4">Get started by creating your first product.</p>
-                                <Button asChild variant="outline">
-                                    <Link to="/products/new">
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Add Product
-                                    </Link>
-                                </Button>
+                                {(() => {
+                                    const isRestricted = profile?.capabilities?.canAddProducts === false;
+                                    const isLimitReached = products.length >= (profile?.capabilities?.maxProductNumber || 0);
+                                    const isDisabled = isRestricted || isLimitReached || profile?.status === 'disabled';
+
+                                    return (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="inline-block">
+                                                        <Button
+                                                            variant="outline"
+                                                            disabled={isDisabled}
+                                                            onClick={() => !isDisabled && navigate('/products/new')}
+                                                        >
+                                                            <Plus className="mr-2 h-4 w-4" />
+                                                            Add Product
+                                                        </Button>
+                                                    </div>
+                                                </TooltipTrigger>
+                                                {(() => {
+                                                    if (isRestricted) return <TooltipContent><p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Product creation is disabled</p></TooltipContent>;
+                                                    if (isLimitReached) return <TooltipContent><p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Product limit reached</p></TooltipContent>;
+                                                    return null;
+                                                })()}
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    );
+                                })()}
                             </div>
                         ) : (
                             <Table>

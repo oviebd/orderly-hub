@@ -102,8 +102,16 @@ export function useFirebaseOrders() {
     if (!ordersRef) throw new Error('Could not determine storage path');
 
     setIsCreating(true);
-
     try {
+      // Capability Checks
+      if (!profile.capabilities.canAddOrder) {
+        throw new Error('Order creation is disabled for your account.');
+      }
+
+      if (orders.length >= profile.capabilities.maxOrderNumber) {
+        throw new Error(`Order limit reached. Your current plan allows up to ${profile.capabilities.maxOrderNumber} orders.`);
+      }
+
       const orderDocRef = order.id ? doc(ordersRef, order.id) : doc(ordersRef);
       const isUpdate = order.id ? (await getDoc(orderDocRef)).exists() : false;
 

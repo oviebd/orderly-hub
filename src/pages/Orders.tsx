@@ -6,7 +6,8 @@ import { CustomerDialog } from '@/components/customers/CustomerDialog';
 import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Package, Loader2, Search, ArrowUpDown, ShoppingBag, Download, Upload, Filter, Calendar, X } from 'lucide-react';
+import { Plus, Package, Loader2, Search, ArrowUpDown, ShoppingBag, Download, Upload, Filter, Calendar, X, AlertCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Order, OrderStatus, Customer, OrderSource } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
@@ -511,23 +512,87 @@ export default function Orders() {
                             accept=".xlsx, .xls"
                             className="hidden"
                         />
-                        <Button variant="outline" size="sm" onClick={handleImportClick} className="gap-1.5">
-                            <Upload className="h-4 w-4" />
-                            Import
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
-                            <Download className="h-4 w-4" />
-                            Export
-                        </Button>
-                        <Button
-                            onClick={() => setAddOrderOpen(true)}
-                            size="sm"
-                            className="gap-1.5"
-                            disabled={isCreating || profile?.canCreateOrders === false || profile?.status === 'disabled'}
-                        >
-                            {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                            New Order
-                        </Button>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="inline-block">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleImportClick}
+                                            className="gap-1.5"
+                                            disabled={profile?.capabilities?.hasExportImportOption === false}
+                                        >
+                                            <Upload className="h-4 w-4" />
+                                            Import
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                {profile?.capabilities?.hasExportImportOption === false && (
+                                    <TooltipContent>
+                                        <p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Upgrade your plan to use Import feature</p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="inline-block">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleExport}
+                                            className="gap-1.5"
+                                            disabled={profile?.capabilities?.hasExportImportOption === false}
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            Export
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                {profile?.capabilities?.hasExportImportOption === false && (
+                                    <TooltipContent>
+                                        <p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Upgrade your plan to use Export feature</p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="inline-block">
+                                        {(() => {
+                                            const isRestricted = profile?.capabilities?.canAddOrder === false;
+                                            const isLimitReached = orders.length >= (profile?.capabilities?.maxOrderNumber || 0);
+                                            const isDisabled = isCreating || isRestricted || isLimitReached || profile?.status === 'disabled';
+
+                                            return (
+                                                <Button
+                                                    onClick={() => setAddOrderOpen(true)}
+                                                    size="sm"
+                                                    className="gap-1.5"
+                                                    disabled={isDisabled}
+                                                >
+                                                    {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                                                    New Order
+                                                </Button>
+                                            );
+                                        })()}
+                                    </div>
+                                </TooltipTrigger>
+                                {(() => {
+                                    const isRestricted = profile?.capabilities?.canAddOrder === false;
+                                    const isLimitReached = orders.length >= (profile?.capabilities?.maxOrderNumber || 0);
+
+                                    if (isRestricted) {
+                                        return <TooltipContent><p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Order creation is disabled for your plan</p></TooltipContent>;
+                                    }
+                                    if (isLimitReached) {
+                                        return <TooltipContent><p className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-500" /> Order limit reached ({profile?.capabilities?.maxOrderNumber}). Upgrade to add more.</p></TooltipContent>;
+                                    }
+                                    return null;
+                                })()}
+                            </Tooltip>
+                        </TooltipProvider>
                     </div>
                 </div>
 

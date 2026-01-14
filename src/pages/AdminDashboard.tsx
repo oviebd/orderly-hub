@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { db } from '@/lib/firebase';
 import { getBusinessRootPath } from '@/lib/utils';
-import { collection, query, getDocs, doc, updateDoc, addDoc, orderBy, limit, where, Timestamp } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, addDoc, orderBy, limit, where, Timestamp, getDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
@@ -23,6 +23,20 @@ interface BusinessOwner {
     canCreateOrders: boolean;
     createdAt: any;
     plan?: string;
+    capabilities?: {
+        canAddOrder: boolean;
+        canAddCustomer: boolean;
+        canAddProducts: boolean;
+        hasExportImportOption: boolean;
+        maxOrderNumber: number;
+        maxCustomerNumber: number;
+        maxProductNumber: number;
+    };
+    businessPlan?: {
+        name: string;
+        price: number;
+        currency: string;
+    };
 }
 
 interface ActivityLog {
@@ -166,6 +180,18 @@ export default function AdminDashboard() {
                         return d && d >= start! && d <= end!;
                     });
                 }
+                // C. Fetch Capabilities from BusinessAccounts
+                const bizAccRef = doc(db, 'BusinessAccounts', statsOwner.email);
+                const bizAccSnap = await getDoc(bizAccRef);
+                if (bizAccSnap.exists()) {
+                    const bizAccData = bizAccSnap.data();
+                    setStatsOwner(prev => prev ? {
+                        ...prev,
+                        capabilities: bizAccData.capabilities,
+                        businessPlan: bizAccData.businessPlan
+                    } : null);
+                }
+
                 setLogs(userLogsData);
 
             } else {
@@ -239,6 +265,15 @@ export default function AdminDashboard() {
         } else {
             setStatsOwner(prev => prev ? { ...prev, canCreateOrders: newVal } : null);
         }
+    };
+
+    const updateCapability = async (owner: BusinessOwner, key: string, value: any) => {
+        if (!owner.email) return;
+        const bizAccRef = doc(db, 'BusinessAccounts', owner.email);
+        const newCapabilities = { ...owner.capabilities, [key]: value };
+        await updateDoc(bizAccRef, { capabilities: newCapabilities });
+        await logActivity('update_capability', owner, { [key]: value });
+        setStatsOwner(prev => prev ? { ...prev, capabilities: newCapabilities as any } : null);
     };
 
     // Modal for quick view in list (optional, maybe not needed if we stick to full page drill down)
@@ -431,6 +466,93 @@ export default function AdminDashboard() {
                                             className="data-[state=checked]:bg-indigo-600"
                                         />
                                     </div>
+
+                                    {statsOwner.capabilities && (
+                                        <>
+                                            <Separator className="bg-slate-800" />
+                                            <div className="space-y-4 pt-2">
+                                                <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Plan Capabilities</h3>
+
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-0.5">
+                                                        <div className="font-medium text-slate-200">Add Orders</div>
+                                                        <div className="text-[10px] text-slate-500">Allow adding new orders</div>
+                                                    </div>
+                                                    <Switch
+                                                        checked={statsOwner.capabilities.canAddOrder}
+                                                        onCheckedChange={(val) => updateCapability(statsOwner, 'canAddOrder', val)}
+                                                        className="data-[state=checked]:bg-indigo-600"
+                                                    />
+                                                </div>
+
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-0.5">
+                                                        <div className="font-medium text-slate-200">Add Customers</div>
+                                                        <div className="text-[10px] text-slate-500">Allow adding new customers</div>
+                                                    </div>
+                                                    <Switch
+                                                        checked={statsOwner.capabilities.canAddCustomer}
+                                                        onCheckedChange={(val) => updateCapability(statsOwner, 'canAddCustomer', val)}
+                                                        className="data-[state=checked]:bg-indigo-600"
+                                                    />
+                                                </div>
+
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-0.5">
+                                                        <div className="font-medium text-slate-200">Add Products</div>
+                                                        <div className="text-[10px] text-slate-500">Allow adding new products</div>
+                                                    </div>
+                                                    <Switch
+                                                        checked={statsOwner.capabilities.canAddProducts}
+                                                        onCheckedChange={(val) => updateCapability(statsOwner, 'canAddProducts', val)}
+                                                        className="data-[state=checked]:bg-indigo-600"
+                                                    />
+                                                </div>
+
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-0.5">
+                                                        <div className="font-medium text-slate-200">Export/Import</div>
+                                                        <div className="text-[10px] text-slate-500">Enable data portability tools</div>
+                                                    </div>
+                                                    <Switch
+                                                        checked={statsOwner.capabilities.hasExportImportOption}
+                                                        onCheckedChange={(val) => updateCapability(statsOwner, 'hasExportImportOption', val)}
+                                                        className="data-[state=checked]:bg-indigo-600"
+                                                    />
+                                                </div>
+
+                                                <div className="grid grid-cols-1 gap-3 pt-2">
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Max Orders</label>
+                                                        <Input
+                                                            type="number"
+                                                            value={statsOwner.capabilities.maxOrderNumber}
+                                                            onChange={(e) => updateCapability(statsOwner, 'maxOrderNumber', parseInt(e.target.value) || 0)}
+                                                            className="h-8 bg-slate-800 border-slate-700 text-slate-200 text-xs"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Max Customers</label>
+                                                        <Input
+                                                            type="number"
+                                                            value={statsOwner.capabilities.maxCustomerNumber}
+                                                            onChange={(e) => updateCapability(statsOwner, 'maxCustomerNumber', parseInt(e.target.value) || 0)}
+                                                            className="h-8 bg-slate-800 border-slate-700 text-slate-200 text-xs"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Max Products</label>
+                                                        <Input
+                                                            type="number"
+                                                            value={statsOwner.capabilities.maxProductNumber}
+                                                            onChange={(e) => updateCapability(statsOwner, 'maxProductNumber', parseInt(e.target.value) || 0)}
+                                                            className="h-8 bg-slate-800 border-slate-700 text-slate-200 text-xs"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </CardContent>
                             </Card>
 

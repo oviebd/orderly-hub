@@ -9,6 +9,22 @@ import {
 import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
+interface Capabilities {
+  canAddOrder: boolean;
+  canAddCustomer: boolean;
+  canAddProducts: boolean;
+  hasExportImportOption: boolean;
+  maxOrderNumber: number;
+  maxCustomerNumber: number;
+  maxProductNumber: number;
+}
+
+interface BusinessPlan {
+  name: string;
+  price: number;
+  currency: string;
+}
+
 interface Profile {
   userId?: string;
   businessId?: string;
@@ -28,6 +44,8 @@ interface Profile {
     facebook?: string;
     youtube?: string;
   };
+  capabilities: Capabilities;
+  businessPlan: BusinessPlan;
   onboardingRequired?: boolean;
 }
 
@@ -112,6 +130,20 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
                     status: userData.status || 'enabled',
                     canCreateOrders: userData.canCreateOrders ?? true,
                     createdAt: userProfile.createdAt?.toDate() || new Date(),
+                    capabilities: businessData.capabilities || {
+                      canAddOrder: true,
+                      canAddCustomer: true,
+                      canAddProducts: true,
+                      hasExportImportOption: false,
+                      maxOrderNumber: 10,
+                      maxCustomerNumber: 10,
+                      maxProductNumber: 10
+                    },
+                    businessPlan: businessData.businessPlan || {
+                      name: 'Free',
+                      price: 0,
+                      currency: 'BDT'
+                    },
                     onboardingRequired: false
                   } as Profile);
                 } else {
@@ -124,6 +156,20 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
                     plan: 'free',
                     businessName: '',
                     createdAt: new Date(),
+                    capabilities: {
+                      canAddOrder: true,
+                      canAddCustomer: true,
+                      canAddProducts: true,
+                      hasExportImportOption: false,
+                      maxOrderNumber: 10,
+                      maxCustomerNumber: 10,
+                      maxProductNumber: 10
+                    },
+                    businessPlan: {
+                      name: 'Free',
+                      price: 0,
+                      currency: 'BDT'
+                    },
                     onboardingRequired: true
                   });
                 }
@@ -211,7 +257,21 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
       await setDoc(doc(db, 'BusinessAccounts', user.email), {
         profile: userProfile,
-        businesses: [newBusiness] // Store full details in array
+        businesses: [newBusiness], // Store full details in array
+        capabilities: {
+          canAddOrder: true,
+          canAddCustomer: true,
+          canAddProducts: true,
+          hasExportImportOption: false,
+          maxOrderNumber: 10,
+          maxCustomerNumber: 10,
+          maxProductNumber: 10
+        },
+        businessPlan: {
+          name: 'Free',
+          price: 0,
+          currency: 'BDT'
+        }
       });
 
       // Update basic user info if needed

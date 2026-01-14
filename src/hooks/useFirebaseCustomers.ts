@@ -98,6 +98,16 @@ export function useFirebaseCustomers() {
     setIsCreating(true);
 
     try {
+      // Capability Checks
+      if (!profile.capabilities.canAddCustomer) {
+        throw new Error('Customer creation is disabled for your account.');
+      }
+
+      if (customers.length >= profile.capabilities.maxCustomerNumber && !customer.id) {
+        // Only check limit for NEW customers
+        throw new Error(`Customer limit reached. Your current plan allows up to ${profile.capabilities.maxCustomerNumber} customers.`);
+      }
+
       let customerRef;
       let isUpdate = false;
 

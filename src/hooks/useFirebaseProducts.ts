@@ -89,6 +89,16 @@ export function useFirebaseProducts() {
         const productsRef = getCollectionRef();
         if (!productsRef) throw new Error('Could not determine storage path');
 
+        // Capability Checks
+        if (!profile.capabilities.canAddProducts) {
+            throw new Error('Product creation is disabled for your account.');
+        }
+
+        if (products.length >= profile.capabilities.maxProductNumber && !productData.productId) {
+            // Only check limit for NEW products
+            throw new Error(`Product limit reached. Your current plan allows up to ${profile.capabilities.maxProductNumber} products.`);
+        }
+
         // Determine if we use a specific ID or generate one
         const productDocRef = productData.productId
             ? doc(productsRef, productData.productId)
