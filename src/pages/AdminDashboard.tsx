@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { db } from '@/lib/firebase';
 import { getBusinessRootPath } from '@/lib/utils';
-import { collection, query, getDocs, doc, updateDoc, addDoc, orderBy, limit, where, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, addDoc, orderBy, limit, where, Timestamp, getDoc, setDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
@@ -38,6 +38,15 @@ interface BusinessOwner {
         price: number;
         currency: string;
     };
+}
+
+interface ActivityLog {
+    id: string;
+    adminEmail: string;
+    action: string;
+    targetUserEmail: string;
+    details: any;
+    timestamp: any;
 }
 
 const PLAN_PRESETS = {
@@ -95,13 +104,19 @@ const PLAN_PRESETS = {
     }
 };
 
-interface ActivityLog {
+interface PlanDefinition {
     id: string;
-    adminEmail: string;
-    action: string;
-    targetUserEmail: string;
-    details: any;
-    timestamp: any;
+    name: string;
+    price: number;
+    capabilities: {
+        canAddOrder: boolean;
+        canAddCustomer: boolean;
+        canAddProducts: boolean;
+        hasExportImportOption: boolean;
+        maxOrderNumber: number;
+        maxCustomerNumber: number;
+        maxProductNumber: number;
+    };
 }
 
 interface OrderStats {
@@ -120,10 +135,12 @@ export default function AdminDashboard() {
     const navigate = useNavigate();
     const [owners, setOwners] = useState<BusinessOwner[]>([]);
     const [filteredOwners, setFilteredOwners] = useState<BusinessOwner[]>([]);
+    const [plans, setPlans] = useState<PlanDefinition[]>([]);
     const [logs, setLogs] = useState<ActivityLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [timeRange, setTimeRange] = useState<TimeRange>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [view, setView] = useState<'users' | 'plans'>('users');
 
     const [statsOwner, setStatsOwner] = useState<BusinessOwner | null>(null);
     const [stats, setStats] = useState<OrderStats>({
@@ -162,7 +179,25 @@ export default function AdminDashboard() {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            // 1. Fetch Owners (Merged view)
+            // 1. Fetch Plans first
+            const plansSnap = await getDocs(collection(db, 'Plan'));
+            let plansList: PlanDefinition[] = [];
+
+            if (plansSnap.empty) {
+                // Initialize Plan collection with defaults if empty
+                const batch = [];
+                for (const [key, preset] of Object.entries(PLAN_PRESETS)) {
+                    const planRef = doc(db, 'Plan', key);
+                    batch.push(setDoc(planRef, preset));
+                    plansList.push({ id: key, ...preset } as PlanDefinition);
+                }
+                await Promise.all(batch);
+            } else {
+                plansList = plansSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlanDefinition));
+            }
+            setPlans(plansList);
+
+            // 2. Fetch Owners (Merged view)
             if (!statsOwner && owners.length === 0) {
                 const [usersSnap, bizAccSnap] = await Promise.all([
                     getDocs(query(collection(db, 'users'), where('role', '==', 'business'))),
@@ -369,10 +404,12 @@ export default function AdminDashboard() {
         }
     };
 
-    const applyPreset = async (owner: BusinessOwner, presetName: keyof typeof PLAN_PRESETS) => {
+    const applyPreset = async (owner: BusinessOwner, planId: string) => {
         if (!owner.email) return;
         try {
-            const preset = PLAN_PRESETS[presetName];
+            const preset = plans.find(p => p.id === planId);
+            if (!preset) return;
+
             const bizAccRef = doc(db, 'BusinessAccounts', owner.email);
 
             const updateData = {
@@ -385,7 +422,7 @@ export default function AdminDashboard() {
             };
 
             await updateDoc(bizAccRef, updateData);
-            await logActivity('apply_preset', owner, { preset: presetName });
+            await logActivity('apply_preset', owner, { preset: planId });
 
             setStatsOwner(prev => prev ? {
                 ...prev,
@@ -393,10 +430,46 @@ export default function AdminDashboard() {
                 businessPlan: updateData.businessPlan as any
             } : null);
 
-            toast.success(`Applied ${presetName} plan preset`);
+            toast.success(`Applied ${preset.name} plan preset`);
         } catch (error) {
             console.error('Error applying preset:', error);
             toast.error('Failed to apply preset');
+        }
+    };
+
+    const updatePlanDefinition = async (planId: string, key: string, value: any) => {
+        try {
+            const planRef = doc(db, 'Plan', planId);
+            const plan = plans.find(p => p.id === planId);
+            if (!plan) return;
+
+            // Handle nested capabilities
+            let updatedData;
+            if (key.startsWith('cap_')) {
+                const capKey = key.replace('cap_', '');
+                updatedData = {
+                    capabilities: {
+                        ...plan.capabilities,
+                        [capKey]: value
+                    }
+                };
+            } else {
+                updatedData = { [key]: value };
+            }
+
+            await updateDoc(planRef, updatedData);
+
+            setPlans(prev => prev.map(p => p.id === planId ? {
+                ...p,
+                ...(key.startsWith('cap_') ? {
+                    capabilities: { ...p.capabilities, [key.replace('cap_', '')]: value }
+                } : { [key]: value })
+            } as PlanDefinition : p));
+
+            toast.success(`Plan ${planId} updated`);
+        } catch (error) {
+            console.error('Error updating plan:', error);
+            toast.error('Failed to update plan');
         }
     };
 
@@ -655,19 +728,19 @@ export default function AdminDashboard() {
                                                     )}
                                                 </h3>
                                                 <div className="flex flex-wrap gap-2">
-                                                    {(Object.keys(PLAN_PRESETS) as Array<keyof typeof PLAN_PRESETS>).map((p) => (
+                                                    {plans.map((p) => (
                                                         <Button
-                                                            key={p}
+                                                            key={p.id}
                                                             variant="outline"
                                                             size="sm"
-                                                            onClick={() => applyPreset(statsOwner, p)}
-                                                            className={`h-8 border-indigo-500/30 bg-slate-800 hover:bg-slate-700 hover:text-white transition-all ${statsOwner.businessPlan?.name === p ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400' : 'text-slate-400'}`}
+                                                            onClick={() => applyPreset(statsOwner, p.id)}
+                                                            className={`h-8 border-indigo-500/30 bg-slate-800 hover:bg-slate-700 hover:text-white transition-all ${statsOwner.businessPlan?.name === p.name ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400' : 'text-slate-400'}`}
                                                         >
-                                                            {p === 'Lite' && <Zap className="h-3 w-3 mr-1" />}
-                                                            {p === 'Silver' && <Zap className="h-3 w-3 mr-1 fill-current" />}
-                                                            {p === 'Gold' && <Crown className="h-3 w-3 mr-1" />}
-                                                            {p === 'Elite' && <Gem className="h-3 w-3 mr-1" />}
-                                                            {p}
+                                                            {p.id === 'Lite' && <Zap className="h-3 w-3 mr-1" />}
+                                                            {p.id === 'Silver' && <Zap className="h-3 w-3 mr-1 fill-current" />}
+                                                            {p.id === 'Gold' && <Crown className="h-3 w-3 mr-1" />}
+                                                            {p.id === 'Elite' && <Gem className="h-3 w-3 mr-1" />}
+                                                            {p.name}
                                                         </Button>
                                                     ))}
                                                 </div>
@@ -807,184 +880,284 @@ export default function AdminDashboard() {
                     // ==========================
                     // LIST VIEW (Global)
                     // ==========================
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Owners List Section */}
-                        <Card className="lg:col-span-2 shadow-sm border-none bg-white flex flex-col h-full">
-                            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div>
-                                    <CardTitle className="text-xl">Business Owners</CardTitle>
-                                    <CardDescription>Manage user permissions</CardDescription>
-                                </div>
-                                <div className="flex flex-col md:flex-row items-center gap-2">
-                                    <div className="relative w-full md:w-64">
-                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                                        <Input
-                                            type="text"
-                                            placeholder="Search list..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="pl-9 bg-slate-50 border-slate-200 focus:bg-white transition-all"
-                                        />
-                                    </div>
-                                    <div className="relative w-full md:w-64">
-                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-indigo-400" />
-                                        <Input
-                                            type="text"
-                                            placeholder="Direct email lookup..."
-                                            className="pl-9 border-indigo-100 focus:border-indigo-300 transition-all font-mono text-xs"
-                                            onKeyDown={(e) => e.key === 'Enter' && handleLookupByEmail((e.target as HTMLInputElement).value)}
-                                        />
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="flex-1 overflow-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="hover:bg-transparent">
-                                            <TableHead>Business & Email</TableHead>
-                                            <TableHead>Account</TableHead>
-                                            <TableHead>Plan</TableHead>
-                                            <TableHead>Orders</TableHead>
-                                            <TableHead className="text-right pr-6">Manage</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {filteredOwners.length > 0 ? (
-                                            filteredOwners.map((owner) => (
-                                                <TableRow
-                                                    key={owner.id}
-                                                    onClick={() => handleEnterDetailView(owner)}
-                                                    className="cursor-pointer group hover:bg-slate-50/50 transition-colors"
-                                                >
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                                                                {(owner.businessName?.[0] || '?').toUpperCase()}
-                                                            </div>
-                                                            <div>
-                                                                <div className="font-semibold text-slate-900">{owner.businessName}</div>
-                                                                <div className="text-[11px] text-slate-500 font-mono">{owner.email}</div>
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={owner.status === 'enabled' ? 'default' : 'destructive'}
-                                                            className={`gap-1.5 px-2 font-medium ${owner.status === 'enabled' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'}`}>
-                                                            <div className={`h-1.5 w-1.5 rounded-full ${owner.status === 'enabled' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
-                                                            {owner.status}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline" className={`font-medium ${owner.businessPlan?.name === 'Elite' ? 'text-purple-600 border-purple-200 bg-purple-50' :
-                                                                owner.businessPlan?.name === 'Gold' ? 'text-amber-600 border-amber-200 bg-amber-50' :
-                                                                    owner.businessPlan?.name === 'Silver' ? 'text-slate-600 border-slate-300 bg-slate-100' :
-                                                                        'text-slate-400 border-slate-200'
-                                                            }`}>
-                                                            {owner.businessPlan?.name === 'Elite' && <Gem className="h-3 w-3 mr-1" />}
-                                                            {owner.businessPlan?.name === 'Gold' && <Crown className="h-3 w-3 mr-1" />}
-                                                            {owner.businessPlan?.name || owner.plan || 'Free'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline"
-                                                            className={`gap-1.5 font-medium ${owner.canCreateOrders ? 'text-indigo-600 border-indigo-100 bg-indigo-50/30' : 'text-slate-400 border-slate-200'}`}>
-                                                            <ShoppingBag className="h-3 w-3" />
-                                                            {owner.canCreateOrders ? 'Active' : 'Locked'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                                                            <Button variant="ghost" size="icon" onClick={() => handleViewDetailsModal(owner)} className="h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50">
-                                                                <Info className="h-4 w-4" />
-                                                            </Button>
-                                                            <Separator orientation="vertical" className="h-4 mx-1" />
-                                                            <div className="flex items-center gap-4">
-                                                                <Switch
-                                                                    checked={owner.status === 'enabled'}
-                                                                    onCheckedChange={() => toggleStatus(owner)}
-                                                                    className="data-[state=checked]:bg-emerald-500"
-                                                                />
-                                                                <Switch
-                                                                    checked={owner.canCreateOrders}
-                                                                    onCheckedChange={() => toggleOrderCreation(owner)}
-                                                                    className="data-[state=checked]:bg-indigo-600"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="text-center py-8 text-slate-400">
-                                                    No users found matching "{searchQuery}"
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {/* Tab Switcher */}
+                        <div className="flex items-center gap-4 border-b">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setView('users')}
+                                className={`rounded-none border-b-2 px-6 h-12 ${view === 'users' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30' : 'border-transparent text-slate-500'}`}
+                            >
+                                <Users className="h-4 w-4 mr-2" />
+                                Business Owners
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                onClick={() => setView('plans')}
+                                className={`rounded-none border-b-2 px-6 h-12 ${view === 'plans' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30' : 'border-transparent text-slate-500'}`}
+                            >
+                                <ShieldCheck className="h-4 w-4 mr-2" />
+                                Plan Management
+                            </Button>
+                        </div>
 
-                        {/* Audit Logs (Global) */}
-                        <div className="space-y-4">
-                            <Card className="shadow-sm border-none bg-white h-full flex flex-col">
-                                <CardHeader className="pb-3 border-b border-slate-50 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <CardTitle className="text-lg flex items-center gap-2">
-                                            <Clock className="h-5 w-5 text-indigo-600" />
-                                            Audit Logs (Global)
-                                        </CardTitle>
-                                    </div>
-                                    <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg">
-                                        {(['today', 'week', 'month', 'all'] as const).map((r) => (
-                                            <Button
-                                                key={r}
-                                                variant={timeRange === r ? 'default' : 'ghost'}
-                                                size="sm"
-                                                onClick={() => setTimeRange(r)}
-                                                className={`flex-1 h-7 text-xs ${timeRange === r ? 'bg-white text-indigo-600 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
-                                            >
-                                                {r.charAt(0).toUpperCase() + r.slice(1)}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="pt-4 px-2 flex-1 overflow-auto max-h-[calc(100vh-300px)]">
-                                    <div className="space-y-3">
-                                        {logs.map((log) => (
-                                            <div key={log.id} className="relative pl-6 pb-2 border-l-2 border-slate-100 last:border-0 last:pb-0">
-                                                <div className="absolute left-[-5px] top-1 h-2 w-2 rounded-full bg-indigo-200 border-2 border-indigo-500 shadow-sm shadow-indigo-500/50" />
-                                                <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100 group hover:border-indigo-200 hover:bg-white transition-all duration-300">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-tighter">
-                                                            {log.action.replace('toggle_', '')}
-                                                        </span>
-                                                        <span className="text-[9px] text-slate-400">
-                                                            {log.timestamp?.toDate ? format(log.timestamp.toDate(), 'HH:mm') : 'now'}
-                                                        </span>
+                        {view === 'users' ? (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                {/* Owners List Section */}
+                                <Card className="lg:col-span-2 shadow-sm border-none bg-white flex flex-col h-full">
+                                    <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div>
+                                            <CardTitle className="text-xl">Business Owners</CardTitle>
+                                            <CardDescription>Manage user permissions</CardDescription>
+                                        </div>
+                                        <div className="flex flex-col md:flex-row items-center gap-2">
+                                            <div className="relative w-full md:w-64">
+                                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                                                <Input
+                                                    type="text"
+                                                    placeholder="Search list..."
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    className="pl-9 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                                                />
+                                            </div>
+                                            <div className="relative w-full md:w-64">
+                                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-indigo-400" />
+                                                <Input
+                                                    type="text"
+                                                    placeholder="Direct email lookup..."
+                                                    className="pl-9 border-indigo-100 focus:border-indigo-300 transition-all font-mono text-xs"
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleLookupByEmail((e.target as HTMLInputElement).value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="flex-1 overflow-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="hover:bg-transparent">
+                                                    <TableHead>Business & Email</TableHead>
+                                                    <TableHead>Account</TableHead>
+                                                    <TableHead>Plan</TableHead>
+                                                    <TableHead>Orders</TableHead>
+                                                    <TableHead className="text-right pr-6">Manage</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {filteredOwners.length > 0 ? (
+                                                    filteredOwners.map((owner) => (
+                                                        <TableRow
+                                                            key={owner.id}
+                                                            onClick={() => handleEnterDetailView(owner)}
+                                                            className="cursor-pointer group hover:bg-slate-50/50 transition-colors"
+                                                        >
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                                                                        {(owner.businessName?.[0] || '?').toUpperCase()}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="font-semibold text-slate-900">{owner.businessName}</div>
+                                                                        <div className="text-[11px] text-slate-500 font-mono">{owner.email}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant={owner.status === 'enabled' ? 'default' : 'destructive'}
+                                                                    className={`gap-1.5 px-2 font-medium ${owner.status === 'enabled' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'}`}>
+                                                                    <div className={`h-1.5 w-1.5 rounded-full ${owner.status === 'enabled' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
+                                                                    {owner.status}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline" className={`font-medium ${owner.businessPlan?.name === 'Elite' ? 'text-purple-600 border-purple-200 bg-purple-50' :
+                                                                    owner.businessPlan?.name === 'Gold' ? 'text-amber-600 border-amber-200 bg-amber-50' :
+                                                                        owner.businessPlan?.name === 'Silver' ? 'text-slate-600 border-slate-300 bg-slate-100' :
+                                                                            'text-slate-400 border-slate-200'
+                                                                    }`}>
+                                                                    {owner.businessPlan?.name === 'Elite' && <Gem className="h-3 w-3 mr-1" />}
+                                                                    {owner.businessPlan?.name === 'Gold' && <Crown className="h-3 w-3 mr-1" />}
+                                                                    {owner.businessPlan?.name || owner.plan || 'Free'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline"
+                                                                    className={`gap-1.5 font-medium ${owner.canCreateOrders ? 'text-indigo-600 border-indigo-100 bg-indigo-50/30' : 'text-slate-400 border-slate-200'}`}>
+                                                                    <ShoppingBag className="h-3 w-3" />
+                                                                    {owner.canCreateOrders ? 'Active' : 'Locked'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                                                    <Button variant="ghost" size="icon" onClick={() => handleViewDetailsModal(owner)} className="h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50">
+                                                                        <Info className="h-4 w-4" />
+                                                                    </Button>
+                                                                    <Separator orientation="vertical" className="h-4 mx-1" />
+                                                                    <div className="flex items-center gap-4">
+                                                                        <Switch
+                                                                            checked={owner.status === 'enabled'}
+                                                                            onCheckedChange={() => toggleStatus(owner)}
+                                                                            className="data-[state=checked]:bg-emerald-500"
+                                                                        />
+                                                                        <Switch
+                                                                            checked={owner.canCreateOrders}
+                                                                            onCheckedChange={() => toggleOrderCreation(owner)}
+                                                                            className="data-[state=checked]:bg-indigo-600"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="text-center py-8 text-slate-400">
+                                                            No users found matching "{searchQuery}"
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Audit Logs (Global) */}
+                                <div className="space-y-4">
+                                    <Card className="shadow-sm border-none bg-white h-full flex flex-col">
+                                        <CardHeader className="pb-3 border-b border-slate-50 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <CardTitle className="text-lg flex items-center gap-2">
+                                                    <Clock className="h-5 w-5 text-indigo-600" />
+                                                    Audit Logs (Global)
+                                                </CardTitle>
+                                            </div>
+                                            <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg">
+                                                {(['today', 'week', 'month', 'all'] as const).map((r) => (
+                                                    <Button
+                                                        key={r}
+                                                        variant={timeRange === r ? 'default' : 'ghost'}
+                                                        size="sm"
+                                                        onClick={() => setTimeRange(r)}
+                                                        className={`flex-1 h-7 text-xs ${timeRange === r ? 'bg-white text-indigo-600 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
+                                                    >
+                                                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="pt-4 px-2 flex-1 overflow-auto max-h-[calc(100vh-300px)]">
+                                            <div className="space-y-3">
+                                                {logs.map((log) => (
+                                                    <div key={log.id} className="relative pl-6 pb-2 border-l-2 border-slate-100 last:border-0 last:pb-0">
+                                                        <div className="absolute left-[-5px] top-1 h-2 w-2 rounded-full bg-indigo-200 border-2 border-indigo-500 shadow-sm shadow-indigo-500/50" />
+                                                        <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100 group hover:border-indigo-200 hover:bg-white transition-all duration-300">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-tighter">
+                                                                    {log.action.replace('toggle_', '')}
+                                                                </span>
+                                                                <span className="text-[9px] text-slate-400">
+                                                                    {log.timestamp?.toDate ? format(log.timestamp.toDate(), 'HH:mm') : 'now'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] leading-tight text-slate-700">
+                                                                <span className="font-semibold">{log.adminEmail.split('@')[0]}</span>
+                                                                {" updated "}
+                                                                <span className="font-semibold text-slate-900">{log.targetUserEmail.split('@')[0]}</span>
+                                                            </p>
+                                                            <div className="mt-1.5 pt-1.5 border-t border-slate-100/50 flex items-center justify-between">
+                                                                <span className="text-[9px] font-mono text-slate-500">
+                                                                    {JSON.stringify(log.details)}
+                                                                </span>
+                                                                <span className="text-[9px] text-slate-400">
+                                                                    {log.timestamp?.toDate && format(log.timestamp.toDate(), 'MMM d')}
+                                                                </span>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <p className="text-[11px] leading-tight text-slate-700">
-                                                        <span className="font-semibold">{log.adminEmail.split('@')[0]}</span>
-                                                        {" updated "}
-                                                        <span className="font-semibold text-slate-900">{log.targetUserEmail.split('@')[0]}</span>
-                                                    </p>
-                                                    <div className="mt-1.5 pt-1.5 border-t border-slate-100/50 flex items-center justify-between">
-                                                        <span className="text-[9px] font-mono text-slate-500">
-                                                            {JSON.stringify(log.details)}
-                                                        </span>
-                                                        <span className="text-[9px] text-slate-400">
-                                                            {log.timestamp?.toDate && format(log.timestamp.toDate(), 'MMM d')}
-                                                        </span>
-                                                    </div>
+                                                ))}
+                                                {logs.length === 0 && <p className="text-center text-slate-400 py-12 text-sm italic">No activity logs found for this period.</p>}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                {plans.map((p) => (
+                                    <Card key={p.id} className="border-none shadow-md bg-white overflow-hidden">
+                                        <CardHeader className="bg-slate-950 text-white pb-6">
+                                            <div className="flex items-center justify-between">
+                                                <CardTitle className="flex items-center gap-2">
+                                                    {p.id === 'Lite' && <Zap className="h-4 w-4" />}
+                                                    {p.id === 'Silver' && <Zap className="h-4 w-4 fill-current" />}
+                                                    {p.id === 'Gold' && <Crown className="h-4 w-4" />}
+                                                    {p.id === 'Elite' && <Gem className="h-4 w-4" />}
+                                                    {p.name}
+                                                </CardTitle>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-xs opacity-60">৳</span>
+                                                    <span className="font-bold text-lg">{p.price}</span>
                                                 </div>
                                             </div>
-                                        ))}
-                                        {logs.length === 0 && <p className="text-center text-slate-400 py-12 text-sm italic">No activity logs found for this period.</p>}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
+                                            <div className="mt-2">
+                                                <Input
+                                                    type="number"
+                                                    value={p.price}
+                                                    onChange={(e) => updatePlanDefinition(p.id, 'price', parseInt(e.target.value) || 0)}
+                                                    className="h-8 bg-white/10 border-white/20 text-white text-xs w-24"
+                                                />
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="p-6 space-y-4">
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-semibold text-slate-500">Max Orders</span>
+                                                    <Input
+                                                        type="number"
+                                                        value={p.capabilities.maxOrderNumber}
+                                                        onChange={(e) => updatePlanDefinition(p.id, 'cap_maxOrderNumber', parseInt(e.target.value) || 0)}
+                                                        className="w-20 h-8 text-xs bg-slate-50"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-semibold text-slate-500">Max Customers</span>
+                                                    <Input
+                                                        type="number"
+                                                        value={p.capabilities.maxCustomerNumber}
+                                                        onChange={(e) => updatePlanDefinition(p.id, 'cap_maxCustomerNumber', parseInt(e.target.value) || 0)}
+                                                        className="w-20 h-8 text-xs bg-slate-50"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-semibold text-slate-500">Max Products</span>
+                                                    <Input
+                                                        type="number"
+                                                        value={p.capabilities.maxProductNumber}
+                                                        onChange={(e) => updatePlanDefinition(p.id, 'cap_maxProductNumber', parseInt(e.target.value) || 0)}
+                                                        className="w-20 h-8 text-xs bg-slate-50"
+                                                    />
+                                                </div>
+                                                <Separator className="my-2" />
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-semibold text-slate-500">Export/Import</span>
+                                                    <Switch
+                                                        checked={p.capabilities.hasExportImportOption}
+                                                        onCheckedChange={(val) => updatePlanDefinition(p.id, 'cap_hasExportImportOption', val)}
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-semibold text-slate-500">Create Orders</span>
+                                                    <Switch
+                                                        checked={p.capabilities.canAddOrder}
+                                                        onCheckedChange={(val) => updatePlanDefinition(p.id, 'cap_canAddOrder', val)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </main>

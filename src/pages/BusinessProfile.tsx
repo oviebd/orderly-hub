@@ -5,8 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Save, User as UserIcon, Building2, MapPin, Youtube, Facebook, Phone, Mail, Link } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Save, User as UserIcon, Building2, MapPin, Youtube, Facebook, Phone, Mail, Link, Package, Zap, Crown, Gem, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useFirebasePlans } from '@/hooks/useFirebasePlans';
 import { doc, updateDoc } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { db } from '@/lib/firebase';
@@ -30,6 +33,10 @@ export default function BusinessProfile() {
     const [youtube, setYoutube] = useState('');
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
+    const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false);
+    const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+
+    const { plans, loading: plansLoading } = useFirebasePlans();
 
     // Initialize form with profile data
     useEffect(() => {
@@ -104,6 +111,45 @@ export default function BusinessProfile() {
             toast({
                 title: 'Error',
                 description: message,
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleUpdatePlan = async () => {
+        if (!user || !user.email || !selectedPlanId) return;
+
+        setIsSaving(true);
+        try {
+            const selectedPlan = plans.find(p => p.id === selectedPlanId);
+            if (!selectedPlan) {
+                throw new Error('Selected plan not found');
+            }
+
+            const businessAccountRef = doc(db, 'BusinessAccounts', user.email);
+            await updateDoc(businessAccountRef, {
+                businessPlan: {
+                    name: selectedPlan.name,
+                    price: selectedPlan.price,
+                    currency: 'BDT'
+                },
+                capabilities: selectedPlan.capabilities
+            });
+
+            toast({
+                title: 'Plan Updated',
+                description: `Your plan has been updated to ${selectedPlan.name} successfully.`,
+            });
+
+            setIsPlanDialogOpen(false);
+            setSelectedPlanId(null);
+        } catch (error: any) {
+            console.error('Error updating plan:', error);
+            toast({
+                title: 'Error',
+                description: error.message || 'Failed to update plan.',
                 variant: 'destructive',
             });
         } finally {
@@ -267,6 +313,75 @@ export default function BusinessProfile() {
                                 </div>
                             </div>
 
+                            {/* Plan & Subscription Section */}
+                            <div className="border-t pt-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-medium">Plan & Subscription</h3>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsPlanDialogOpen(true)}
+                                        disabled={plansLoading}
+                                    >
+                                        <Package className="h-4 w-4 mr-2" />
+                                        Update Plan
+                                    </Button>
+                                </div>
+
+                                {profile?.businessPlan ? (
+                                    <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4 rounded-lg border">
+                                        <div className="flex items-start justify-between">
+                                            <div className="space-y-3 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    {profile.businessPlan.name === 'Elite' && <Gem className="h-5 w-5 text-purple-600" />}
+                                                    {profile.businessPlan.name === 'Gold' && <Crown className="h-5 w-5 text-amber-600" />}
+                                                    {profile.businessPlan.name === 'Silver' && <Zap className="h-5 w-5 text-slate-600 fill-current" />}
+                                                    {profile.businessPlan.name === 'Lite' && <Zap className="h-5 w-5 text-blue-600" />}
+                                                    <Badge variant="outline" className={`font-medium ${profile.businessPlan.name === 'Elite' ? 'text-purple-600 border-purple-200 bg-purple-50' :
+                                                        profile.businessPlan.name === 'Gold' ? 'text-amber-600 border-amber-200 bg-amber-50' :
+                                                            profile.businessPlan.name === 'Silver' ? 'text-slate-600 border-slate-300 bg-slate-100' :
+                                                                'text-blue-600 border-blue-200 bg-blue-50'
+                                                        }`}>
+                                                        {profile.businessPlan.name} Plan
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                                                    ৳{profile.businessPlan.price.toLocaleString()}
+                                                    <span className="text-sm font-normal text-muted-foreground ml-1">/ month</span>
+                                                </p>
+                                                {profile.capabilities && (
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-xs">
+                                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                                            <Check className="h-3 w-3 text-green-600" />
+                                                            {profile.capabilities.maxOrderNumber === 999999 ? 'Unlimited' : profile.capabilities.maxOrderNumber} Orders
+                                                        </div>
+                                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                                            <Check className="h-3 w-3 text-green-600" />
+                                                            {profile.capabilities.maxCustomerNumber === 999999 ? 'Unlimited' : profile.capabilities.maxCustomerNumber} Customers
+                                                        </div>
+                                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                                            <Check className="h-3 w-3 text-green-600" />
+                                                            {profile.capabilities.maxProductNumber === 999999 ? 'Unlimited' : profile.capabilities.maxProductNumber} Products
+                                                        </div>
+                                                        <div className={`flex items-center gap-1 ${profile.capabilities.hasExportImportOption ? 'text-muted-foreground' : 'text-red-600'}`}>
+                                                            {profile.capabilities.hasExportImportOption ? (
+                                                                <Check className="h-3 w-3 text-green-600" />
+                                                            ) : (
+                                                                <span className="h-3 w-3 text-red-600 font-bold">✕</span>
+                                                            )}
+                                                            Import/Export
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">No plan information available</p>
+                                )}
+                            </div>
+
                             {isEditing && (
                                 <div className="border-t pt-4 bg-muted/20 p-4 rounded-lg">
                                     <h3 className="text-sm font-medium mb-2 text-destructive">Security</h3>
@@ -327,6 +442,102 @@ export default function BusinessProfile() {
                         </form>
                     </CardContent>
                 </Card>
+
+                {/* Plan Selection Dialog */}
+                <Dialog open={isPlanDialogOpen} onOpenChange={setIsPlanDialogOpen}>
+                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle>Choose Your Plan</DialogTitle>
+                            <DialogDescription>
+                                Select a plan that fits your business needs. You can upgrade or downgrade at any time.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="grid gap-4 md:grid-cols-2 py-4">
+                            {plans.map((plan) => (
+                                <div
+                                    key={plan.id}
+                                    className={`border rounded-lg p-6 cursor-pointer transition-all hover:shadow-lg ${selectedPlanId === plan.id
+                                        ? 'border-primary shadow-md ring-2 ring-primary'
+                                        : profile?.businessPlan?.name === plan.name
+                                            ? 'border-green-500 bg-green-50/50'
+                                            : 'border-slate-200'
+                                        }`}
+                                    onClick={() => setSelectedPlanId(plan.id)}
+                                >
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div className="flex items-center gap-2">
+                                            {plan.name === 'Elite' && <Gem className="h-6 w-6 text-purple-600" />}
+                                            {plan.name === 'Gold' && <Crown className="h-6 w-6 text-amber-600" />}
+                                            {plan.name === 'Silver' && <Zap className="h-6 w-6 text-slate-600 fill-current" />}
+                                            {plan.name === 'Lite' && <Zap className="h-6 w-6 text-blue-600" />}
+                                            <h3 className="text-xl font-bold">{plan.name}</h3>
+                                        </div>
+                                        {profile?.businessPlan?.name === plan.name && (
+                                            <Badge variant="outline" className="text-green-600 border-green-600">
+                                                Current Plan
+                                            </Badge>
+                                        )}
+                                    </div>
+
+                                    <p className="text-3xl font-bold mb-1">
+                                        ৳{plan.price.toLocaleString()}
+                                        <span className="text-sm font-normal text-muted-foreground ml-1">/ month</span>
+                                    </p>
+
+                                    <div className="space-y-2 mt-4 text-sm">
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Check className="h-4 w-4 text-green-600" />
+                                            <span>
+                                                {plan.capabilities.maxOrderNumber === 999999 ? 'Unlimited' : plan.capabilities.maxOrderNumber.toLocaleString()} Orders
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Check className="h-4 w-4 text-green-600" />
+                                            <span>
+                                                {plan.capabilities.maxCustomerNumber === 999999 ? 'Unlimited' : plan.capabilities.maxCustomerNumber.toLocaleString()} Customers
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Check className="h-4 w-4 text-green-600" />
+                                            <span>
+                                                {plan.capabilities.maxProductNumber === 999999 ? 'Unlimited' : plan.capabilities.maxProductNumber.toLocaleString()} Products
+                                            </span>
+                                        </div>
+                                        <div className={`flex items-center gap-2 ${plan.capabilities.hasExportImportOption ? 'text-muted-foreground' : 'text-red-600'}`}>
+                                            {plan.capabilities.hasExportImportOption ? (
+                                                <Check className="h-4 w-4 text-green-600" />
+                                            ) : (
+                                                <span className="h-4 w-4 text-red-600 font-bold flex items-center justify-center">✕</span>
+                                            )}
+                                            <span>Import/Export Data</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}</div>
+
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setIsPlanDialogOpen(false);
+                                    setSelectedPlanId(null);
+                                }}
+                                disabled={isSaving}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleUpdatePlan}
+                                disabled={!selectedPlanId || isSaving || selectedPlanId === profile?.businessPlan?.name}
+                            >
+                                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Update Plan
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </DashboardLayout>
     );
