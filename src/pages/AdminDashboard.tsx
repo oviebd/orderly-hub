@@ -7,22 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { ShieldCheck, Users, Activity, Power, ShoppingBag, LogOut, Info, Calendar as CalendarIcon, ArrowLeft, Search, Clock, Package, DollarSign, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldCheck, Users, Activity, Power, ShoppingBag, LogOut, Info, Calendar as CalendarIcon, ArrowLeft, Search, Clock, Package, DollarSign, CheckCircle2, XCircle, Zap, Crown, Gem, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 
 interface BusinessOwner {
-    id: string;
+    id: string; // auth uid
     businessName: string;
     email: string;
     status: 'enabled' | 'disabled';
-    canCreateOrders: boolean;
+    canCreateOrders: boolean; // legacy field in 'users'
     createdAt: any;
-    plan?: string;
+    plan?: string; // legacy plan field
     capabilities?: {
         canAddOrder: boolean;
         canAddCustomer: boolean;
@@ -38,6 +39,61 @@ interface BusinessOwner {
         currency: string;
     };
 }
+
+const PLAN_PRESETS = {
+    Lite: {
+        name: 'Lite',
+        price: 0,
+        capabilities: {
+            canAddOrder: true,
+            canAddCustomer: true,
+            canAddProducts: true,
+            hasExportImportOption: false,
+            maxOrderNumber: 10,
+            maxCustomerNumber: 10,
+            maxProductNumber: 10
+        }
+    },
+    Silver: {
+        name: 'Silver',
+        price: 990,
+        capabilities: {
+            canAddOrder: true,
+            canAddCustomer: true,
+            canAddProducts: true,
+            hasExportImportOption: false,
+            maxOrderNumber: 100,
+            maxCustomerNumber: 50,
+            maxProductNumber: 50
+        }
+    },
+    Gold: {
+        name: 'Gold',
+        price: 2490,
+        capabilities: {
+            canAddOrder: true,
+            canAddCustomer: true,
+            canAddProducts: true,
+            hasExportImportOption: true,
+            maxOrderNumber: 500,
+            maxCustomerNumber: 200,
+            maxProductNumber: 200
+        }
+    },
+    Elite: {
+        name: 'Elite',
+        price: 4990,
+        capabilities: {
+            canAddOrder: true,
+            canAddCustomer: true,
+            canAddProducts: true,
+            hasExportImportOption: true,
+            maxOrderNumber: 999999,
+            maxCustomerNumber: 999999,
+            maxProductNumber: 999999
+        }
+    }
+};
 
 interface ActivityLog {
     id: string;
@@ -106,13 +162,44 @@ export default function AdminDashboard() {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            // 1. Fetch Owners (Only if not already loaded, OR if we want to ensure fresh data for list view)
-            // For simplicity and freshness, we fetch when in global view or if empty.
+            // 1. Fetch Owners (Merged view)
             if (!statsOwner && owners.length === 0) {
-                const ownersSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'business')));
-                const ownersData = ownersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as BusinessOwner));
-                setOwners(ownersData);
-                setFilteredOwners(ownersData);
+                const [usersSnap, bizAccSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'users'), where('role', '==', 'business'))),
+                    getDocs(collection(db, 'BusinessAccounts'))
+                ]);
+
+                const bizAccMap = new Map();
+                bizAccSnap.forEach(d => bizAccMap.set(d.id, d.data()));
+
+                const mergedOwners = usersSnap.docs.map(uDoc => {
+                    const uData = uDoc.data();
+                    const bData = bizAccMap.get(uData.email) || {};
+
+                    let businessName = uData.businessName || '';
+                    if (!businessName && bData.businesses && bData.businesses[0]) {
+                        businessName = bData.businesses[0].businessName;
+                    } else if (!businessName && bData.business) {
+                        businessName = bData.business.businessName;
+                    } else if (!businessName && bData.profile) {
+                        businessName = bData.profile.businessName;
+                    }
+
+                    return {
+                        id: uDoc.id,
+                        businessName: businessName || 'Unnamed Business',
+                        email: uData.email,
+                        status: uData.status || 'enabled',
+                        canCreateOrders: uData.canCreateOrders ?? true,
+                        createdAt: uData.createdAt,
+                        capabilities: bData.capabilities,
+                        businessPlan: bData.businessPlan,
+                        plan: uData.plan
+                    } as BusinessOwner;
+                });
+
+                setOwners(mergedOwners);
+                setFilteredOwners(mergedOwners);
             }
 
             // Time Range Calculation
@@ -269,11 +356,88 @@ export default function AdminDashboard() {
 
     const updateCapability = async (owner: BusinessOwner, key: string, value: any) => {
         if (!owner.email) return;
-        const bizAccRef = doc(db, 'BusinessAccounts', owner.email);
-        const newCapabilities = { ...owner.capabilities, [key]: value };
-        await updateDoc(bizAccRef, { capabilities: newCapabilities });
-        await logActivity('update_capability', owner, { [key]: value });
-        setStatsOwner(prev => prev ? { ...prev, capabilities: newCapabilities as any } : null);
+        try {
+            const bizAccRef = doc(db, 'BusinessAccounts', owner.email);
+            const newCapabilities = { ...(owner.capabilities || {}), [key]: value };
+            await updateDoc(bizAccRef, { capabilities: newCapabilities });
+            await logActivity('update_capability', owner, { [key]: value });
+            setStatsOwner(prev => prev ? { ...prev, capabilities: newCapabilities as any } : null);
+            toast.success(`${key} updated successfully`);
+        } catch (error) {
+            console.error('Error updating capability:', error);
+            toast.error('Failed to update capability');
+        }
+    };
+
+    const applyPreset = async (owner: BusinessOwner, presetName: keyof typeof PLAN_PRESETS) => {
+        if (!owner.email) return;
+        try {
+            const preset = PLAN_PRESETS[presetName];
+            const bizAccRef = doc(db, 'BusinessAccounts', owner.email);
+
+            const updateData = {
+                capabilities: preset.capabilities,
+                businessPlan: {
+                    name: preset.name,
+                    price: preset.price,
+                    currency: 'BDT'
+                }
+            };
+
+            await updateDoc(bizAccRef, updateData);
+            await logActivity('apply_preset', owner, { preset: presetName });
+
+            setStatsOwner(prev => prev ? {
+                ...prev,
+                capabilities: preset.capabilities as any,
+                businessPlan: updateData.businessPlan as any
+            } : null);
+
+            toast.success(`Applied ${presetName} plan preset`);
+        } catch (error) {
+            console.error('Error applying preset:', error);
+            toast.error('Failed to apply preset');
+        }
+    };
+
+    const handleLookupByEmail = async (email: string) => {
+        if (!email.trim() || !email.includes('@')) return;
+        setIsLoading(true);
+        try {
+            const bizAccRef = doc(db, 'BusinessAccounts', email.trim());
+            const bizAccSnap = await getDoc(bizAccRef);
+
+            if (bizAccSnap.exists()) {
+                const bData = bizAccSnap.data();
+                // We also need the 'users' doc for status/uid
+                const usersSnap = await getDocs(query(collection(db, 'users'), where('email', '==', email.trim())));
+                const uDoc = usersSnap.docs[0];
+                const uData = uDoc ? uDoc.data() : { status: 'enabled', canCreateOrders: true };
+
+                const businessName = bData.profile?.businessName || bData.business?.businessName || bData.businesses?.[0]?.businessName || 'Unnamed Business';
+
+                const foundOwner: BusinessOwner = {
+                    id: uDoc ? uDoc.id : 'unknown',
+                    businessName,
+                    email: email.trim(),
+                    status: uData.status || 'enabled',
+                    canCreateOrders: uData.canCreateOrders ?? true,
+                    createdAt: bData.profile?.createdAt || uData.createdAt,
+                    capabilities: bData.capabilities,
+                    businessPlan: bData.businessPlan
+                };
+
+                setStatsOwner(foundOwner);
+                toast.success('Business account found');
+            } else {
+                toast.error('No business account found for this email');
+            }
+        } catch (error) {
+            console.error('Error looking up business:', error);
+            toast.error('Lookup failed');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // Modal for quick view in list (optional, maybe not needed if we stick to full page drill down)
@@ -362,18 +526,28 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 bg-white p-1 rounded-xl shadow-sm border">
-                                {(['today', 'week', 'month', 'all'] as const).map((r) => (
-                                    <Button
-                                        key={r}
-                                        variant={timeRange === r ? 'default' : 'ghost'}
-                                        size="sm"
-                                        onClick={() => setTimeRange(r)}
-                                        className={timeRange === r ? 'bg-indigo-600 shadow-md' : 'text-slate-500'}
-                                    >
-                                        {r.charAt(0).toUpperCase() + r.slice(1)}
-                                    </Button>
-                                ))}
+                            <div className="flex flex-col md:flex-row items-center gap-2">
+                                <div className="flex items-center gap-2 bg-white p-1 rounded-xl shadow-sm border mr-2">
+                                    {(['today', 'week', 'month', 'all'] as const).map((r) => (
+                                        <Button
+                                            key={r}
+                                            variant={timeRange === r ? 'default' : 'ghost'}
+                                            size="sm"
+                                            onClick={() => setTimeRange(r)}
+                                            className={timeRange === r ? 'bg-indigo-600 shadow-md' : 'text-slate-500'}
+                                        >
+                                            {r.charAt(0).toUpperCase() + r.slice(1)}
+                                        </Button>
+                                    ))}
+                                </div>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                                    <Input
+                                        placeholder="Quick lookup by email..."
+                                        className="pl-9 h-10 w-64 bg-white border-slate-200"
+                                        onKeyDown={(e) => e.key === 'Enter' && handleLookupByEmail((e.target as HTMLInputElement).value)}
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -470,8 +644,38 @@ export default function AdminDashboard() {
                                     {statsOwner.capabilities && (
                                         <>
                                             <Separator className="bg-slate-800" />
+
                                             <div className="space-y-4 pt-2">
-                                                <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Plan Capabilities</h3>
+                                                <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center justify-between">
+                                                    Plan Presets
+                                                    {statsOwner.businessPlan && (
+                                                        <Badge variant="outline" className="text-[10px] border-indigo-500/50 text-indigo-400">
+                                                            Current: {statsOwner.businessPlan.name}
+                                                        </Badge>
+                                                    )}
+                                                </h3>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(Object.keys(PLAN_PRESETS) as Array<keyof typeof PLAN_PRESETS>).map((p) => (
+                                                        <Button
+                                                            key={p}
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => applyPreset(statsOwner, p)}
+                                                            className={`h-8 border-indigo-500/30 bg-slate-800 hover:bg-slate-700 hover:text-white transition-all ${statsOwner.businessPlan?.name === p ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400' : 'text-slate-400'}`}
+                                                        >
+                                                            {p === 'Lite' && <Zap className="h-3 w-3 mr-1" />}
+                                                            {p === 'Silver' && <Zap className="h-3 w-3 mr-1 fill-current" />}
+                                                            {p === 'Gold' && <Crown className="h-3 w-3 mr-1" />}
+                                                            {p === 'Elite' && <Gem className="h-3 w-3 mr-1" />}
+                                                            {p}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <Separator className="bg-slate-800" />
+                                            <div className="space-y-4 pt-2">
+                                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Custom Capabilities</h3>
 
                                                 <div className="flex items-center justify-between">
                                                     <div className="space-y-0.5">
@@ -611,15 +815,26 @@ export default function AdminDashboard() {
                                     <CardTitle className="text-xl">Business Owners</CardTitle>
                                     <CardDescription>Manage user permissions</CardDescription>
                                 </div>
-                                <div className="relative w-full md:w-64">
-                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input
-                                        type="text"
-                                        placeholder="Search by User or Email..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="pl-9 bg-slate-50 border-slate-200 focus:bg-white transition-all"
-                                    />
+                                <div className="flex flex-col md:flex-row items-center gap-2">
+                                    <div className="relative w-full md:w-64">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                                        <Input
+                                            type="text"
+                                            placeholder="Search list..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="pl-9 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                                        />
+                                    </div>
+                                    <div className="relative w-full md:w-64">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-indigo-400" />
+                                        <Input
+                                            type="text"
+                                            placeholder="Direct email lookup..."
+                                            className="pl-9 border-indigo-100 focus:border-indigo-300 transition-all font-mono text-xs"
+                                            onKeyDown={(e) => e.key === 'Enter' && handleLookupByEmail((e.target as HTMLInputElement).value)}
+                                        />
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent className="flex-1 overflow-auto">
@@ -628,6 +843,7 @@ export default function AdminDashboard() {
                                         <TableRow className="hover:bg-transparent">
                                             <TableHead>Business & Email</TableHead>
                                             <TableHead>Account</TableHead>
+                                            <TableHead>Plan</TableHead>
                                             <TableHead>Orders</TableHead>
                                             <TableHead className="text-right pr-6">Manage</TableHead>
                                         </TableRow>
@@ -656,6 +872,17 @@ export default function AdminDashboard() {
                                                             className={`gap-1.5 px-2 font-medium ${owner.status === 'enabled' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'}`}>
                                                             <div className={`h-1.5 w-1.5 rounded-full ${owner.status === 'enabled' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
                                                             {owner.status}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className={`font-medium ${owner.businessPlan?.name === 'Elite' ? 'text-purple-600 border-purple-200 bg-purple-50' :
+                                                                owner.businessPlan?.name === 'Gold' ? 'text-amber-600 border-amber-200 bg-amber-50' :
+                                                                    owner.businessPlan?.name === 'Silver' ? 'text-slate-600 border-slate-300 bg-slate-100' :
+                                                                        'text-slate-400 border-slate-200'
+                                                            }`}>
+                                                            {owner.businessPlan?.name === 'Elite' && <Gem className="h-3 w-3 mr-1" />}
+                                                            {owner.businessPlan?.name === 'Gold' && <Crown className="h-3 w-3 mr-1" />}
+                                                            {owner.businessPlan?.name || owner.plan || 'Free'}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell>
