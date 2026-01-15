@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { ShieldCheck, Users, Activity, Power, ShoppingBag, LogOut, Info, Calendar as CalendarIcon, ArrowLeft, Search, Clock, Package, DollarSign, CheckCircle2, XCircle, Zap, Crown, Gem, Check } from 'lucide-react';
+import { ShieldCheck, Users, Activity, Power, ShoppingBag, LogOut, Info, Calendar as CalendarIcon, ArrowLeft, Search, Clock, Package, DollarSign, CheckCircle2, XCircle, Zap, Crown, Gem, Check, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
@@ -154,6 +154,8 @@ export default function AdminDashboard() {
 
     const [ownerDetailOpen, setOwnerDetailOpen] = useState(false);
     const [selectedOwnerForModal, setSelectedOwnerForModal] = useState<BusinessOwner | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
+
 
 
     useEffect(() => {
@@ -526,7 +528,147 @@ export default function AdminDashboard() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
+    const exportAllFirestoreData = async () => {
+        setIsExporting(true);
+        try {
+            toast.info('Starting export... This may take a moment.');
+
+            // Helper function to convert Firestore Timestamps to ISO strings
+            const convertTimestamps = (obj: any): any => {
+                if (!obj) return obj;
+                if (typeof obj?.toDate === 'function') {
+                    return obj.toDate().toISOString();
+                }
+                if (Array.isArray(obj)) {
+                    return obj.map(convertTimestamps);
+                }
+                if (typeof obj === 'object') {
+                    const converted: any = {};
+                    for (const key in obj) {
+                        converted[key] = convertTimestamps(obj[key]);
+                    }
+                    return converted;
+                }
+                return obj;
+            };
+
+            const exportData: any = {
+                exportedAt: new Date().toISOString(),
+                collections: {},
+            };
+
+            // 1. Export BusinessAccounts
+            const businessAccountsSnap = await getDocs(collection(db, 'BusinessAccounts'));
+            exportData.collections.BusinessAccounts = businessAccountsSnap.docs.map(doc => ({
+                id: doc.id,
+                ...convertTimestamps(doc.data())
+            }));
+
+            // 2. Export Plan
+            const plansSnap = await getDocs(collection(db, 'Plan'));
+            exportData.collections.Plan = plansSnap.docs.map(doc => ({
+                id: doc.id,
+                ...convertTimestamps(doc.data())
+            }));
+
+            // 3. Export activity_logs
+            const logsSnap = await getDocs(query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc')));
+            exportData.collections.activity_logs = logsSnap.docs.map(doc => ({
+                id: doc.id,
+                ...convertTimestamps(doc.data())
+            }));
+
+            // 4. Export products (root level)
+            const productsSnap = await getDocs(collection(db, 'products'));
+            exportData.collections.products = productsSnap.docs.map(doc => ({
+                id: doc.id,
+                ...convertTimestamps(doc.data())
+            }));
+
+            // 5. Export users
+            const usersSnap = await getDocs(collection(db, 'users'));
+            exportData.collections.users = usersSnap.docs.map(doc => ({
+                id: doc.id,
+                ...convertTimestamps(doc.data())
+            }));
+
+            // 6. Export business-specific data (nested collections)
+            exportData.collections.businessData = [];
+
+            for (const bizDoc of businessAccountsSnap.docs) {
+                const bizData = bizDoc.data();
+                const businessName = bizData.profile?.businessName || bizData.business?.businessName ||
+                    bizData.businesses?.[0]?.businessName || 'Unknown';
+                const email = bizDoc.id;
+
+                try {
+                    const rootPath = getBusinessRootPath(businessName, email);
+
+                    // Fetch customers
+                    const customersSnap = await getDocs(collection(db, rootPath, 'customers'));
+                    const customers = customersSnap.docs.map(doc => ({
+                        id: doc.id,
+                        ...convertTimestamps(doc.data())
+                    }));
+
+                    // Fetch orders
+                    const ordersSnap = await getDocs(collection(db, rootPath, 'orders'));
+                    const orders = ordersSnap.docs.map(doc => ({
+                        id: doc.id,
+                        ...convertTimestamps(doc.data())
+                    }));
+
+                    // Fetch products
+                    const bizProductsSnap = await getDocs(collection(db, rootPath, 'products'));
+                    const bizProducts = bizProductsSnap.docs.map(doc => ({
+                        id: doc.id,
+                        ...convertTimestamps(doc.data())
+                    }));
+
+                    // Fetch experiences
+                    const experiencesSnap = await getDocs(collection(db, rootPath, 'experiences'));
+                    const experiences = experiencesSnap.docs.map(doc => ({
+                        id: doc.id,
+                        ...convertTimestamps(doc.data())
+                    }));
+
+                    exportData.collections.businessData.push({
+                        businessEmail: email,
+                        businessName,
+                        rootPath,
+                        customers,
+                        orders,
+                        products: bizProducts,
+                        experiences
+                    });
+                } catch (error) {
+                    console.error(`Error exporting data for business ${email}:`, error);
+                }
+            }
+
+            // Create and download JSON file
+            const jsonString = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `firestore-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast.success('Export completed successfully!');
+        } catch (error) {
+            console.error('Error exporting Firestore data:', error);
+            toast.error('Failed to export data. Check console for details.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     const handleBackToGlobal = () => {
+
         setStatsOwner(null);
         setTimeRange('all');
     };
@@ -556,6 +698,25 @@ export default function AdminDashboard() {
                         <span className="text-xs text-slate-400">Authenticated as</span>
                         <span className="text-sm font-medium text-slate-200">{user?.email}</span>
                     </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={exportAllFirestoreData}
+                        disabled={isExporting}
+                        className="bg-emerald-900/50 border-emerald-500/50 text-emerald-300 hover:text-white hover:bg-emerald-800 hover:border-emerald-400 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isExporting ? (
+                            <>
+                                <div className="h-4 w-4 mr-2 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin" />
+                                Exporting...
+                            </>
+                        ) : (
+                            <>
+                                <Download className="h-4 w-4 mr-2" />
+                                Export Data
+                            </>
+                        )}
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => signOut()} className="bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-indigo-500/50 transition-all duration-300">
                         <LogOut className="h-4 w-4 mr-2" />
                         Sign Out
