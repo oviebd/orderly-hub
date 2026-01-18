@@ -41,6 +41,7 @@ export interface Order {
   notes: string;
   createdAt: Date;
   updatedAt: Date;
+  invoiceNumber?: string;
 }
 
 export interface User {

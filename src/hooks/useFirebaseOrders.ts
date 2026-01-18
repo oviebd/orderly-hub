@@ -14,7 +14,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getBusinessRootPath } from '@/lib/utils';
+import { getBusinessRootPath, generateInvoiceNumber } from '@/lib/utils';
 import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { Order, OrderStatus, OrderSource } from '@/types';
 
@@ -79,6 +79,7 @@ export function useFirebaseOrders() {
             status: data.status as OrderStatus,
             source: data.source as OrderSource,
             notes: data.notes || '',
+            invoiceNumber: data.invoiceNumber || '',
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || data.createdAt?.toDate() || new Date(),
           } as Order;
@@ -130,6 +131,7 @@ export function useFirebaseOrders() {
         status: order.status,
         source: order.source || 'phone',
         notes: order.notes || '',
+        invoiceNumber: order.invoiceNumber || generateInvoiceNumber(),
         updatedAt: order.updatedAt || serverTimestamp(),
       };
 
@@ -194,6 +196,7 @@ export function useFirebaseOrders() {
           status: data.status as OrderStatus,
           source: data.source as OrderSource,
           notes: data.notes || '',
+          invoiceNumber: data.invoiceNumber || '',
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || data.createdAt?.toDate() || new Date(),
         } as Order;

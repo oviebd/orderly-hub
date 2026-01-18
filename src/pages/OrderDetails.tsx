@@ -15,8 +15,8 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
-import { CalendarIcon, Loader2, ArrowLeft, Save, Star, MessageSquare, Trash2, Plus, Minus, Search, Package } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { CalendarIcon, Loader2, ArrowLeft, Save, Star, MessageSquare, Trash2, Plus, Minus, Search, Package, FileText } from 'lucide-react';
+import { cn, generateInvoiceNumber } from '@/lib/utils';
 import { useFirebaseOrders } from '@/hooks/useFirebaseOrders';
 import { useFirebaseCustomers } from '@/hooks/useFirebaseCustomers';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
@@ -25,6 +25,7 @@ import { useFirebaseAuth } from '@/contexts/FirebaseAuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { ExperienceDialog } from '@/components/orders/ExperienceDialog';
+import { generateInvoice } from '@/lib/invoiceGenerator';
 import { OrderStatus, Product, Order, OrderSource, Experience } from '@/types';
 
 export default function OrderDetails() {
@@ -63,6 +64,7 @@ export default function OrderDetails() {
     const [deliveryTime, setDeliveryTime] = useState('');
     const [source, setSource] = useState<OrderSource>('whatsapp');
     const [notes, setNotes] = useState('');
+    const [invoiceNumber, setInvoiceNumber] = useState('');
 
     const { products: allProducts } = useFirebaseProducts();
 
@@ -92,6 +94,13 @@ export default function OrderDetails() {
                 setDeliveryTime(orderData.hasDeliveryTime ? format(orderData.deliveryDate, 'HH:mm') : '');
                 setSource(orderData.source);
                 setNotes(orderData.notes);
+
+                let currentInvNum = orderData.invoiceNumber;
+                if (!currentInvNum) {
+                    currentInvNum = generateInvoiceNumber();
+                    updateOrder(orderId, { invoiceNumber: currentInvNum });
+                }
+                setInvoiceNumber(currentInvNum);
 
                 if (orderData.status === 'completed' || orderData.status === 'cancelled') {
                     const expData = await getExperienceByOrderId(orderId);
@@ -215,6 +224,7 @@ export default function OrderDetails() {
                 hasDeliveryTime: !!deliveryTime,
                 source,
                 notes,
+                invoiceNumber,
             });
 
             toast({
@@ -342,6 +352,25 @@ export default function OrderDetails() {
                             }}
                         >
                             <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Generate Invoice"
+                            onClick={() => {
+                                const customer = customers.find(c => c.id === order.customerId);
+                                if (customer) {
+                                    generateInvoice(order, customer, profile);
+                                } else {
+                                    toast({
+                                        title: 'Error',
+                                        description: 'Customer information missing',
+                                        variant: 'destructive',
+                                    });
+                                }
+                            }}
+                        >
+                            <FileText className="h-4 w-4" />
                         </Button>
                         <Select value={order.status} onValueChange={(v) => handleStatusChange(v as OrderStatus)}>
                             <SelectTrigger className="w-[140px] h-9">
@@ -530,6 +559,15 @@ export default function OrderDetails() {
                         </div>
 
                         <div className="space-y-4 pt-4 border-t">
+                            <div className="space-y-2">
+                                <Label>Invoice Number</Label>
+                                <Input
+                                    value={invoiceNumber}
+                                    readOnly
+                                    className="bg-muted text-muted-foreground cursor-not-allowed"
+                                />
+                            </div>
+
                             <div className="space-y-2">
                                 <Label>Order Date & Time</Label>
                                 <div className="flex gap-2">
